@@ -59,6 +59,10 @@ npm run typecheck
 npm run build
 ```
 
+GitHub Actions runs these checks on Node.js 22 and 24 for pull requests and pushes
+to `main`. The workflow does not deploy either application. Local checks have been
+run with Node.js 24; the Linux/Node.js 22 matrix will be verified by GitHub after push.
+
 The API tests exercise the health endpoint over HTTP and verify its route prefix.
 Frontend tests cover healthy, unavailable, failed HTTP, wrong-service, and malformed
 JSON responses. Lint currently covers the frontend; type checks cover both apps.
