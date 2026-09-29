@@ -21,6 +21,30 @@ history.
 - Node.js 22 or newer (initial setup verified with Node.js 24).
 - npm 10 or newer (initial setup uses npm 11).
 
+## Local Development
+
+Run these commands from the repository root:
+
+```sh
+npm install
+npm run dev:api
+```
+
+The API runs at `http://127.0.0.1:3001`. `GET /api/health` returns
+`{"status":"ok","service":"stockflow-api"}`. This is a liveness check, not a
+database readiness check. No database connection is required at this milestone.
+The API port can be overridden with the `PORT` environment variable.
+
+## Verification
+
+```sh
+npm test
+npm run typecheck
+npm run build
+```
+
+The API tests exercise the health endpoint over HTTP and verify its route prefix.
+
 ## Delivery Milestones
 
 1. Application foundation and frontend-to-backend connectivity.
