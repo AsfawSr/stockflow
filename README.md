@@ -13,13 +13,34 @@ history.
 
 - `apps/web`: Next.js frontend with TypeScript and the App Router.
 - `apps/api`: NestJS modular monolith for permissions and business workflows.
-- PostgreSQL and Prisma: planned persistence layer.
+- PostgreSQL and Prisma 7: connected persistence layer, with domain models planned next.
 - npm workspaces: one repository and one root dependency lockfile.
 
 ## Requirements
 
-- Node.js 22 or newer (initial setup verified with Node.js 24).
+- Node.js 22.12 or newer in the 22.x line, or Node.js 24+ (verified with Node.js 24).
 - npm 10 or newer (initial setup uses npm 11).
+- A running PostgreSQL server and an existing database.
+
+## Database Configuration
+
+Create `apps/api/.env` using `apps/api/.env.example` as a reference. Set
+`DATABASE_URL` to your PostgreSQL connection URL with the correct host, port,
+database, username, and password. URL-encode special characters in credentials.
+The example targets `stockflow` on `127.0.0.1:5432`; replace its password placeholder.
+Real environment files are ignored by Git and must never be committed.
+
+The API requires `DATABASE_URL` at startup and opens database connections lazily.
+This allows liveness to remain available during a database outage. The database
+pool has bounded connection and statement timeouts and closes on application shutdown.
+The default `postgres` account is suitable only for initial local setup; use a
+dedicated, least-privilege database account before deployment.
+
+Prisma currently has no domain models or migrations. This setup only performs
+read-only connectivity checks; it does not create tables or modify existing data.
+Prisma's CLI is a root development dependency shared by the workspace scripts.
+The generated client is ignored by Git and regenerated before API builds, tests,
+type checks, and development startup.
 
 ## Local Development
 
@@ -38,11 +59,14 @@ npm run dev:web
 
 Open `http://127.0.0.1:3000` for the Next.js system-status page. Refresh status
 performs a new server-side API check. A stopped API displays an unavailable state
-instead of breaking the page. Database and authentication are not configured yet.
+instead of breaking the page. Authentication is not configured yet.
 
 The API runs at `http://127.0.0.1:3001`. `GET /api/health` returns
-`{"status":"ok","service":"stockflow-api"}`. This is a liveness check, not a
-database readiness check. No database connection is required at this milestone.
+`{"status":"ok","service":"stockflow-api"}`. This is a liveness check independent
+of database availability. `GET /api/health/ready` executes `SELECT 1` through Prisma
+and returns `{"status":"ok","service":"stockflow-api","database":"connected"}`.
+It returns HTTP 503 with `database: "unavailable"` on connection or query failure,
+without exposing connection strings or database error details.
 The API port can be overridden with the `PORT` environment variable.
 
 To override the API address, create `apps/web/.env.local` using
@@ -53,6 +77,7 @@ Both development servers bind to the local machine only.
 ## Verification
 
 ```sh
+npm run db:validate
 npm test
 npm run lint
 npm run typecheck
@@ -63,7 +88,9 @@ GitHub Actions runs these checks on Node.js 22 and 24 for pull requests and push
 to `main`. The workflow does not deploy either application. Local checks have been
 run with Node.js 24; the Linux/Node.js 22 matrix will be verified by GitHub after push.
 
-The API tests exercise the health endpoint over HTTP and verify its route prefix.
+The API tests exercise liveness, readiness success and failure, error redaction,
+and the route prefix. They mock the Prisma provider and do not require PostgreSQL
+or local credentials, so CI does not need access to your development database.
 Frontend tests cover healthy, unavailable, failed HTTP, wrong-service, and malformed
 JSON responses. Lint currently covers the frontend; type checks cover both apps.
 
@@ -74,14 +101,18 @@ not yet part of the automated test suite.
 ESLint stays on 9.39.x for compatibility with the React plugin shipped by the current
 Next.js lint configuration. ESLint 10 currently fails with a removed `getFilename`
 API. npm marks ESLint 9 as unsupported; reassess this pin when the plugin is updated.
-The initial dependency audit reported no known vulnerabilities.
+Root overrides pin patched releases of `deepmerge-ts` and `mysql2`, which are
+transitive dependencies of the Prisma CLI. Prisma generation, API tests, and builds
+are checked against these versions; the current dependency audit reports no known
+vulnerabilities. Reassess the overrides when upgrading Prisma.
 
 ## Current Status
 
 Milestone 1 is complete: both applications run, the frontend checks the real API,
-and the connection behavior has automated tests. No inventory data is mocked or
-stored yet. The next milestone is PostgreSQL and Prisma, organization membership,
-authentication, and server-side tenant isolation.
+and the connection behavior has automated tests. PostgreSQL connectivity through
+Prisma and the API readiness endpoint are now implemented. No inventory data is
+mocked or stored yet. The next steps are organization, user, and membership models,
+followed by authentication and server-side tenant isolation.
 
 ## Commit Workflow
 
