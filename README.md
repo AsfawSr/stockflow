@@ -30,20 +30,61 @@ npm install
 npm run dev:api
 ```
 
+In a second terminal, also from the repository root:
+
+```sh
+npm run dev:web
+```
+
+Open `http://127.0.0.1:3000` for the Next.js system-status page. Refresh status
+performs a new server-side API check. A stopped API displays an unavailable state
+instead of breaking the page. Database and authentication are not configured yet.
+
 The API runs at `http://127.0.0.1:3001`. `GET /api/health` returns
 `{"status":"ok","service":"stockflow-api"}`. This is a liveness check, not a
 database readiness check. No database connection is required at this milestone.
 The API port can be overridden with the `PORT` environment variable.
 
+To override the API address, create `apps/web/.env.local` using
+`apps/web/.env.example` as a reference and set `API_BASE_URL`. This is a server-only
+setting; it does not need a `NEXT_PUBLIC_` prefix. Restart Next.js after changing it.
+Both development servers bind to the local machine only.
+
 ## Verification
 
 ```sh
 npm test
+npm run lint
 npm run typecheck
 npm run build
 ```
 
 The API tests exercise the health endpoint over HTTP and verify its route prefix.
+Frontend tests cover healthy, unavailable, failed HTTP, wrong-service, and malformed
+JSON responses. Lint currently covers the frontend; type checks cover both apps.
+
+The initial UI was also checked in a browser at desktop, tablet, and mobile sizes,
+including refresh recovery after starting the API. These manual browser checks are
+not yet part of the automated test suite.
+
+ESLint stays on 9.39.x for compatibility with the React plugin shipped by the current
+Next.js lint configuration. ESLint 10 currently fails with a removed `getFilename`
+API. npm marks ESLint 9 as unsupported; reassess this pin when the plugin is updated.
+The initial dependency audit reported no known vulnerabilities.
+
+## Current Status
+
+Milestone 1 is complete: both applications run, the frontend checks the real API,
+and the connection behavior has automated tests. No inventory data is mocked or
+stored yet. The next milestone is PostgreSQL and Prisma, organization membership,
+authentication, and server-side tenant isolation.
+
+## Commit Workflow
+
+Keep each change focused, run the relevant checks, and commit it locally with a
+message such as `feat(api): add product creation`. Review changes with `git diff`
+and history with `git log --oneline`. Do not include secrets or generated build
+output. Push to GitHub only as a separate, explicit step.
 
 ## Delivery Milestones
 
