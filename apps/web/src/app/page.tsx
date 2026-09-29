@@ -11,13 +11,25 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import Link from 'next/link';
-import { getApiHealth } from '@/lib/api-health';
+import { getApiHealth, isDatabaseReady } from '@/lib/api-health';
 import { RefreshButton } from './refresh-button';
 
 export const dynamic = 'force-dynamic';
 
 export default async function Home() {
-  const health = await getApiHealth();
+  const [health, databaseReady] = await Promise.all([getApiHealth(), isDatabaseReady()]);
+  const allConnected = health.connected && databaseReady;
+  let statusTitle = 'Application services connected';
+  let statusDetail = 'Web application, API, and database are responding.';
+
+  if (!health.connected) {
+    statusTitle = 'API connection unavailable';
+    statusDetail = health.detail;
+  } else if (!databaseReady) {
+    statusTitle = 'Database connection unavailable';
+    statusDetail = 'The API is online, but database readiness could not be confirmed.';
+  }
+
   const checkedAt = new Intl.DateTimeFormat('en-GB', {
     hour: '2-digit',
     minute: '2-digit',
@@ -83,30 +95,30 @@ export default async function Home() {
           </div>
 
           <section
-            className={`status-banner ${health.connected ? 'is-connected' : 'is-unavailable'}`}
+            className={`status-banner ${allConnected ? 'is-connected' : 'is-unavailable'}`}
             aria-label="Connection status"
             aria-live="polite"
           >
             <span className="status-symbol">
-              {health.connected ? (
+              {allConnected ? (
                 <Check size={23} aria-hidden="true" />
               ) : (
                 <CircleAlert size={23} aria-hidden="true" />
               )}
             </span>
             <div>
-              <h2>
-                {health.connected ? 'Application services connected' : 'API connection unavailable'}
-              </h2>
-              <p>{health.connected ? 'Web application and API are responding.' : health.detail}</p>
+              <h2>{statusTitle}</h2>
+              <p>{statusDetail}</p>
             </div>
-            <span className="status-tag">{health.connected ? '2 / 2 ONLINE' : '1 / 2 ONLINE'}</span>
+            <span className="status-tag">
+              {1 + Number(health.connected) + Number(databaseReady)} / 3 ONLINE
+            </span>
           </section>
 
           <section className="services-section" aria-labelledby="services-title">
             <div className="section-heading">
               <h2 id="services-title">Application services</h2>
-              <span>02 services</span>
+              <span>03 services</span>
             </div>
             <div className="service-table-wrapper">
               <table className="service-table">
@@ -159,6 +171,26 @@ export default async function Home() {
                     <td>NestJS</td>
                     <td>{health.connected ? `${health.durationMs} ms` : 'Failed'}</td>
                   </tr>
+                  <tr>
+                    <td>
+                      <div className="service-name">
+                        <span className="service-icon web-icon">
+                          <Database size={20} aria-hidden="true" />
+                        </span>
+                        <div>
+                          Database<small>Readiness query</small>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`badge ${databaseReady ? 'online' : 'offline'}`}>
+                        <span />
+                        {databaseReady ? 'Connected' : 'Unavailable'}
+                      </span>
+                    </td>
+                    <td>PostgreSQL</td>
+                    <td>{databaseReady ? 'Query passed' : 'Failed'}</td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -209,11 +241,6 @@ export default async function Home() {
           </section>
 
           <section className="configuration" aria-label="Workspace configuration">
-            <div>
-              <Database size={18} aria-hidden="true" />
-              <span>Database</span>
-              <strong>Not configured</strong>
-            </div>
             <div>
               <ShieldCheck size={18} aria-hidden="true" />
               <span>Authentication</span>

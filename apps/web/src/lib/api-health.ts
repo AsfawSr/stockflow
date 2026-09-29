@@ -3,6 +3,32 @@ type HealthResponse = {
   service: 'stockflow-api';
 };
 
+export async function isDatabaseReady(): Promise<boolean> {
+  try {
+    const baseUrl = process.env.API_BASE_URL ?? 'http://127.0.0.1:3001';
+    const result = await fetch(`${baseUrl.replace(/\/$/, '')}/api/health/ready`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(3000),
+    });
+
+    if (!result.ok) return false;
+
+    const payload: unknown = await result.json();
+    return (
+      typeof payload === 'object' &&
+      payload !== null &&
+      'status' in payload &&
+      payload.status === 'ok' &&
+      'service' in payload &&
+      payload.service === 'stockflow-api' &&
+      'database' in payload &&
+      payload.database === 'connected'
+    );
+  } catch {
+    return false;
+  }
+}
+
 export type ApiHealth = {
   connected: boolean;
   checkedAt: string;
