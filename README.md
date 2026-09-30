@@ -42,6 +42,8 @@ to the configured database and `npm run db:status` to inspect migration history.
 The first migration expects no conflicting tables or enum. For an existing schema,
 review and baseline it before migrating; never reset a database to bypass a conflict.
 The migration is transaction-wrapped and does not seed any application records.
+The second migration adds separate `password_credentials` and `sessions` tables
+without changing existing users or memberships.
 
 Prisma's CLI is a root development dependency shared by the workspace scripts.
 The generated client is ignored by Git and regenerated before API builds, tests,
@@ -51,7 +53,7 @@ type checks, and development startup.
 
 - `Organization`: company name, one currency, UUID, and timestamps.
 - `User`: global unique email, display name, UUID, and timestamps. A user can belong
-	to several organizations; no passwords or authentication endpoints exist yet.
+	to several organizations. Password hashes are stored in a separate credential table.
 - `Membership`: links one user to one organization with an explicit, non-empty set
 	of roles: `ADMIN`, `PURCHASER`, `MANAGER`, and `WAREHOUSE`. There is no default role.
 
@@ -69,7 +71,46 @@ four current values. Use migrations, not `prisma db push`, to reproduce the sche
 UUID defaults and `updatedAt` updates are handled by Prisma Client.
 
 These relationships do not enforce request-level tenant isolation or permissions.
-Authentication, organization selection, and membership guards are the next milestone.
+Organization selection and membership guards are the next authorization step.
+
+## Authentication API
+
+All endpoints are under `/api`. Routes require a bearer session by default;
+registration, login, liveness, and readiness are explicitly public.
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| POST | `/auth/register` | Create a user and a session atomically; returns 201. |
+| POST | `/auth/login` | Check credentials and issue a new session; returns 200. |
+| GET | `/auth/me` | Return only the authenticated user's id, email, and display name. |
+| POST | `/auth/logout` | Revoke the current session immediately; returns 204. |
+
+Registration accepts only `email`, `displayName`, and `password`; login accepts only
+`email` and `password`. Emails are trimmed and lowercased. New passwords must contain
+12-128 characters; they are never trimmed. Passwords use Argon2id with 64 MiB memory,
+three iterations, and parallelism one. Unknown-user login verifies a dummy hash and
+returns the same 401 response as a wrong password. Duplicate registration returns
+409 and does not claim an existing user or change their credentials.
+
+Registration and login return `{ user, accessToken, expiresAt }`. Send the token only
+in `Authorization: Bearer <accessToken>`, never a URL. Tokens have 256 bits of entropy,
+expire after eight hours, and are stored only as SHA-256 digests. These are opaque,
+revocable sessions, not JWTs. Responses are marked `Cache-Control: no-store`.
+Expiry is enforced on every authenticated request; a new login is required after
+expiry. Logout affects only the current session. Existing users without a password
+credential cannot log in or be taken over through registration.
+
+Registration and login are limited to five attempts per minute per IP and route;
+other API routes are limited to 120 per minute. Health checks are exempt. These
+counters are in memory for the current single-process deployment; production scaling
+requires shared rate-limit storage and a carefully configured trusted proxy.
+
+This is the backend authentication milestone. The Next.js login UI is not connected
+yet; its eventual server-side session layer should keep bearer tokens out of browser
+localStorage. Use HTTPS outside local development. Email verification, password
+reset/change, scheduled expired-session cleanup, and distributed rate limiting are
+still required before public production use. Registration does not verify email
+ownership, and its conflict response can reveal account existence.
 
 ## Local Development
 
@@ -89,7 +130,7 @@ npm run dev:web
 
 Open `http://127.0.0.1:3000` for the Next.js system-status page. Refresh status
 performs a new server-side API check. A stopped API displays an unavailable state
-instead of breaking the page. Authentication is not configured yet.
+instead of breaking the page. The frontend login UI is not implemented yet.
 
 The API runs at `http://127.0.0.1:3001`. `GET /api/health` returns
 `{"status":"ok","service":"stockflow-api"}`. This is a liveness check independent
@@ -137,7 +178,8 @@ npm run test:db
 
 The `.db-spec.ts` tests are excluded from `npm test`. They verify Prisma mappings,
 memberships across organizations, uniqueness, foreign keys, role sets, normalization,
-and restricted deletes. All fixture writes run inside transactions that roll back,
+restricted deletes, real Argon2 verification, expiry, and logout revocation over HTTP.
+All fixture writes run inside transactions that roll back,
 including the Prisma success path. The tests neither reset nor truncate tables.
 
 The initial UI was also checked in a browser at desktop, tablet, and mobile sizes,
@@ -158,8 +200,9 @@ Milestone 1 is complete: both applications run, the frontend checks the real API
 and the connection behavior has automated tests. PostgreSQL connectivity through
 Prisma and the API readiness endpoint are implemented. Organization, user, and
 membership models now have a committed migration and database constraint tests.
-No inventory data is mocked or stored yet. The next steps are authentication and
-server-side tenant isolation before exposing organization-owned business data.
+Backend registration, login, and revocable sessions are implemented. No inventory
+data is mocked or stored yet. Organization authorization and the frontend login
+workflow are the next steps before exposing organization-owned business data.
 
 ## Commit Workflow
 
