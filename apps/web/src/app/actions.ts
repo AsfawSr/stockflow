@@ -9,6 +9,8 @@ import {
   messageSchema,
   resetPasswordSchema,
   loginSchema,
+  invitationSchema,
+  inviteInputSchema,
   locationInputSchema,
   locationSchema,
   membershipSchema,
@@ -612,4 +614,77 @@ export async function createAdjustmentAction(
     };
   revalidatePath(`/workspace/${organizationId.data}/stock`);
   return { success: 'Adjustment recorded.' };
+}
+
+export async function inviteMemberAction(_previous: FormState, form: FormData): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  if (!organizationId.success) return { error: 'Choose a valid organization.' };
+  const values = { email: String(form.get('email') ?? '') };
+  const parsed = inviteInputSchema.safeParse({
+    email: values.email,
+    roles: form.getAll('roles').map(String),
+  });
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors, values };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/invitations`,
+    invitationSchema,
+    { method: 'POST', body: parsed.data },
+  );
+  if (!result.ok)
+    return {
+      error:
+        result.status === 409
+          ? 'This person is already a member.'
+          : result.status === 503
+            ? 'The invitation email could not be sent. Try again.'
+            : result.error,
+      values,
+    };
+  revalidatePath(`/workspace/${organizationId.data}`);
+  return { success: 'Invitation sent.' };
+}
+
+export async function revokeInvitationAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const invitationId = organizationIdSchema.safeParse(form.get('invitationId'));
+  if (!organizationId.success || !invitationId.success)
+    return { error: 'This invitation is no longer available.' };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/invitations/${invitationId.data}`,
+    emptySchema,
+    { method: 'DELETE' },
+  );
+  if (!result.ok && result.status !== 404) return { error: result.error };
+  revalidatePath(`/workspace/${organizationId.data}`);
+  return { success: 'Invitation revoked.' };
+}
+
+export async function acceptInvitationAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const token = accountTokenSchema.safeParse(form.get('token'));
+  if (!token.success)
+    return { error: 'This invitation link is incomplete. Open it from your email again.' };
+  const result = await actionRequest('/invitations/accept', membershipSchema, {
+    method: 'POST',
+    body: { token: token.data },
+  });
+  if (!result.ok)
+    return {
+      error:
+        result.status === 400
+          ? 'This invitation is invalid or expired. Ask for a new one.'
+          : result.status === 403
+            ? 'This invitation was issued for a different email address. Sign in with the invited email.'
+            : result.status === 409
+              ? 'You are already a member of this organization.'
+              : result.error,
+    };
+  await rememberOrganization(result.data.id);
+  revalidatePath('/organizations');
+  redirect(`/workspace/${result.data.id}`);
 }

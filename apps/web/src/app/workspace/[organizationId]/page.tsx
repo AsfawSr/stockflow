@@ -1,8 +1,9 @@
 import { ArrowLeftRight, Building2, CalendarDays, Coins } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/components/app-shell';
+import { InviteMemberButton, RevokeInvitationButton } from '@/components/invitation-forms';
 import { RenameOrganizationForm } from '@/components/organization-forms';
-import { membersSchema, roleLabels } from '@/lib/contracts';
+import { invitationsSchema, membersSchema, roleLabels } from '@/lib/contracts';
 import { authenticatedRequest, requireOrganization, requireUser } from '@/lib/session';
 
 export const metadata = { title: 'Workspace' };
@@ -16,9 +17,12 @@ export default async function WorkspacePage({
   const user = await requireUser();
   const organization = await requireOrganization(organizationId);
   const admin = organization.roles.includes('ADMIN');
-  const members = admin
-    ? await authenticatedRequest(`/organizations/${organization.id}/members`, membersSchema)
-    : null;
+  const [members, invitations] = await Promise.all([
+    admin ? authenticatedRequest(`/organizations/${organization.id}/members`, membersSchema) : null,
+    admin
+      ? authenticatedRequest(`/organizations/${organization.id}/invitations`, invitationsSchema)
+      : null,
+  ]);
   const formatDate = (date: string) =>
     new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(
       new Date(date),
@@ -75,11 +79,14 @@ export default async function WorkspacePage({
         <section className="workspace-section" aria-labelledby="members-heading">
           <div className="section-heading">
             <h2 id="members-heading">Members</h2>
-            {members?.ok && (
-              <span>
-                {members.data.length} {members.data.length === 1 ? 'member' : 'members'}
-              </span>
-            )}
+            <div className="section-heading-actions">
+              {members?.ok && (
+                <span>
+                  {members.data.length} {members.data.length === 1 ? 'member' : 'members'}
+                </span>
+              )}
+              <InviteMemberButton organizationId={organization.id} />
+            </div>
           </div>
           {members?.ok ? (
             <div className="service-table-wrapper">
@@ -119,6 +126,51 @@ export default async function WorkspacePage({
             <p className="form-alert" role="alert">
               {members && !members.ok ? members.error : 'Member list unavailable.'}
             </p>
+          )}
+          {invitations?.ok && invitations.data.length > 0 && (
+            <>
+              <h3 className="subsection-heading">Pending invitations</h3>
+              <div className="service-table-wrapper">
+                <table className="service-table member-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">EMAIL</th>
+                      <th scope="col">ROLES</th>
+                      <th scope="col">INVITED BY</th>
+                      <th scope="col">EXPIRES</th>
+                      <th scope="col">
+                        <span className="visually-hidden">Actions</span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invitations.data.map((invitation) => (
+                      <tr key={invitation.id}>
+                        <td>{invitation.email}</td>
+                        <td>
+                          <div className="role-list">
+                            {invitation.roles.map((role) => (
+                              <span className="role-tag" key={role}>
+                                {roleLabels[role]}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td>{invitation.invitedBy.displayName}</td>
+                        <td>{formatDate(invitation.expiresAt)}</td>
+                        <td>
+                          <RevokeInvitationButton
+                            organizationId={organization.id}
+                            invitationId={invitation.id}
+                            email={invitation.email}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </section>
       )}

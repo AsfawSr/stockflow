@@ -24,6 +24,24 @@ export const organizationSchema = z.object({
 });
 export const membershipSchema = organizationSchema.extend({ roles: z.array(roleSchema).min(1) });
 export const organizationsSchema = z.array(membershipSchema);
+export const invitationSchema = z.object({
+  id: z.uuid(),
+  email: z.email(),
+  roles: z.array(roleSchema).min(1),
+  createdAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime(),
+  invitedBy: z.object({ id: z.uuid(), displayName: z.string().min(1) }),
+});
+export const invitationsSchema = z.array(invitationSchema);
+export const inviteInputSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .max(254)
+    .pipe(z.email({ error: 'Enter a valid email address.' })),
+  roles: z.array(roleSchema).min(1, 'Choose at least one role.'),
+});
 export const membersSchema = z.array(
   z.object({
     user: userSchema.omit({ emailVerifiedAt: true }),

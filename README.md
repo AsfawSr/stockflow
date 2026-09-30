@@ -373,7 +373,10 @@ launch, add a durable mail queue, retry/monitoring, and appropriate abuse contro
 - `/organizations` lists only current memberships, supports name search, and creates
 	organizations with a currency selected from the platform's supported currencies.
 - `/workspace/:organizationId` shows the real organization and current roles.
-	Admins can rename the organization and inspect its members; other members cannot.- `/workspace/:organizationId/products` lists the organization's catalog with search,
+	Admins can rename the organization and inspect its members; other members cannot.
+	Admins also invite members by email with a role set, see pending invitations with
+	their expiry, and revoke them; `/invitations/accept` lets a signed-in, verified
+	user consume an emailed invitation link and join with the invited roles.- `/workspace/:organizationId/products` lists the organization's catalog with search,
   an active/archived/all filter, and pagination. Admins and managers create, edit,
   archive, and restore products through dialogs; other members see a read-only list.
   Search, filter, and paging run server-side through GET parameters, so catalog URLs
@@ -540,7 +543,10 @@ On the stock screen it verifies the delivered balance, rejects an oversized
 transfer while keeping the entered values, records a transfer with a note and a
 negative adjustment with a reason, filters by location, confirms the resulting
 balances in PostgreSQL, and checks that a purchaser can read stock but sees no
-transfer or adjustment controls.
+transfer or adjustment controls. It also invites an address before its account
+exists, revokes and re-issues the invitation, and later has the invited user
+accept through the emailed link, land in the workspace with the invited role,
+and get a clear error on link reuse.
 It checks desktop, tablet,
 and mobile widths, including long organization names, and saves ignored screenshots
 under `apps/web/test-results`. Browser fixture records are committed during the
@@ -578,8 +584,10 @@ per-location stock levels, all covered by constraint, workflow, concurrency, and
 browser tests. Milestone 5 completes the ledger: stock transfers between locations
 and reasoned adjustments with row-level locking and no-negative guarantees, plus a
 stock overview screen with balances, filters, movement history, and role-guarded
-transfer and adjustment dialogs. Invitations and production mail hardening are
-still pending.
+transfer and adjustment dialogs. Member invitations now work end to end: admins
+invite, list, and revoke by email, and invitees join through single-use emailed
+links bound to their verified address. Low-stock indicators and production mail
+hardening are next.
 
 ## Commit Workflow
 

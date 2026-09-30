@@ -316,6 +316,39 @@ main {
   color: var(--muted);
   font-size: 11px;
 }
+.section-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.section-heading-actions > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.subsection-heading {
+  margin: 26px 0 12px;
+  font-size: 14px;
+}
+.role-fieldset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.role-fieldset legend {
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 3px 0;
+}
+.checkbox-label input {
+  accent-color: var(--accent, #1f6f54);
+}
 .service-table-wrapper {
   overflow-x: auto;
 }

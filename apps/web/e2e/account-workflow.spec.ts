@@ -87,6 +87,9 @@ test.afterAll(async () => {
     await database.query('DELETE FROM locations WHERE organization_id = ANY($1::uuid[])', [
       ownedIds,
     ]);
+    await database.query('DELETE FROM invitations WHERE organization_id = ANY($1::uuid[])', [
+      ownedIds,
+    ]);
     await database.query(
       'DELETE FROM memberships WHERE organization_id = ANY($1::uuid[]) AND user_id = ANY($2::uuid[])',
       [ownedIds, userIds],
@@ -445,6 +448,35 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
 
+  // Invite, revoke, and re-invite the outsider before their account exists.
+  await page.getByRole('button', { name: 'Invite member', exact: true }).click();
+  const inviteDialog = page.getByRole('dialog', { name: 'Invite member', exact: true });
+  await inviteDialog.getByRole('button', { name: 'Send invitation', exact: true }).click();
+  await expect(
+    inviteDialog.getByText('Enter a valid email address.', { exact: true }),
+  ).toBeVisible();
+  await expect(inviteDialog.getByText('Choose at least one role.', { exact: true })).toBeVisible();
+  await inviteDialog.getByLabel('Email address', { exact: true }).fill(emails[1]);
+  await inviteDialog.getByLabel('Manager', { exact: true }).check();
+  await inviteDialog.getByRole('button', { name: 'Send invitation', exact: true }).click();
+  await expect(inviteDialog).not.toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Pending invitations', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('cell', { name: emails[1], exact: true })).toBeVisible();
+  await page
+    .getByRole('button', { name: `Revoke invitation for ${emails[1]}`, exact: true })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Pending invitations', exact: true })).toHaveCount(
+    0,
+  );
+  await page.getByRole('button', { name: 'Invite member', exact: true }).click();
+  await inviteDialog.getByLabel('Email address', { exact: true }).fill(emails[1]);
+  await inviteDialog.getByLabel('Manager', { exact: true }).check();
+  await inviteDialog.getByRole('button', { name: 'Send invitation', exact: true }).click();
+  await expect(inviteDialog).not.toBeVisible();
+  await expect(page.getByRole('cell', { name: emails[1], exact: true })).toBeVisible();
+
   await page.getByRole('link', { name: 'Switch organization', exact: true }).click();
   const secondId = await createOrganization(page, longName, 'USD');
   await checkLayouts(page);
@@ -582,6 +614,25 @@ test('account access, cookie privacy, organization selection, and revoked permis
     page.getByRole('heading', { name: 'No organizations yet', exact: true }),
   ).toBeVisible();
   expect((await page.content()).includes(emails[0])).toBe(false);
+
+  // The invited outsider joins through the emailed link with the invited role.
+  const inviteLink = await accountLink(emails[1], '/invitations/accept');
+  await page.goto(inviteLink);
+  await expect(
+    page.getByRole('heading', { name: 'Join the organization', exact: true }),
+  ).toBeVisible();
+  await expect.poll(() => new URL(page.url()).hash).toBe('');
+  await page.getByRole('button', { name: 'Accept invitation', exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/workspace/${firstId}$`));
+  await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
+  await expect(page.locator('.heading-roles').getByText('Manager', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Members', exact: true })).toHaveCount(0);
+  await page.goto(inviteLink);
+  await page.getByRole('button', { name: 'Accept invitation', exact: true }).click();
+  await expect(page.locator('form').getByRole('alert')).toContainText('invalid or expired');
+  await page.goto('/organizations');
+  await expect(page.getByRole('button', { name: `Open ${renamed}`, exact: true })).toBeVisible();
+
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page).toHaveURL(/\/login\?notice=signed-out$/);
   expect(browserErrors).toEqual([]);
