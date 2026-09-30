@@ -13,7 +13,7 @@ history.
 
 - `apps/web`: Next.js frontend with TypeScript and the App Router.
 - `apps/api`: NestJS modular monolith for permissions and business workflows.
-- PostgreSQL and Prisma 7: persistence with organization, user, and membership models.
+- PostgreSQL and Prisma 7: persistence with identity, organization, and product models.
 - npm workspaces: one repository and one root dependency lockfile.
 
 ## Requirements
@@ -49,6 +49,8 @@ without changing existing users or memberships.
 The third adds `account_tokens`, email verification state, and credential versions.
 Existing users remain unverified until they complete verification or password reset;
 the migration does not silently verify any account.
+The fourth migration adds the organization-owned `products` table and its constraints.
+It is additive and does not seed products or change existing identity records.
 
 Prisma's CLI is a root development dependency shared by the workspace scripts.
 The generated client is ignored by Git and regenerated before API builds, tests,
@@ -77,6 +79,32 @@ UUID defaults and `updatedAt` updates are handled by Prisma Client.
 
 These relationships alone do not enforce request-level permissions. Organization
 API routes additionally use current membership guards and scoped database queries.
+
+## Product Data Model
+
+`Product` belongs to one organization and has a UUID, SKU, name, optional description,
+one stock unit, and timestamps. Field limits are 64 characters for SKU, 160 for name,
+2,000 for description, and 32 for unit. Names and units cannot be whitespace-only.
+The unit is a required label such as `piece` or `kg`; conversions are not modeled.
+
+SKUs use uppercase ASCII letters, digits, dots, underscores, and hyphens, starting
+with a letter or digit. The database rejects noncanonical values rather than silently
+normalizing them. A SKU is unique within its organization, but another organization
+may use the same value. Archived products continue to reserve their SKUs.
+
+`archivedAt = null` means active; a timestamp means archived. Clearing that timestamp
+restores the same product identity. There is no redundant status flag or editable
+stock balance. Quantities will later come from the stock movement ledger.
+Deleting an organization with products is restricted rather than cascading.
+
+The `(organizationId, id)` unique key supports tenant-scoped lookups and future
+composite foreign keys. An index on `(organizationId, archivedAt)` supports filtering
+an organization's active or archived catalog. These keys do not replace membership
+authorization: product API endpoints and frontend forms are not implemented yet.
+
+The product database tests are included in `npm run test:db`. They exercise Prisma
+create/archive/restore behavior, scoped identifiers, SKU uniqueness and format,
+field limits, and referential integrity. All product test writes are rolled back.
 
 ## Authentication API
 
@@ -353,7 +381,9 @@ data is mocked or stored yet. Organization creation, scoped access, and admin gu
 are implemented and tested. Frontend signup, login, logout, organization selection,
 and the initial workspace are connected to the real API. Email verification and
 password reset are implemented with local-file and configurable SMTP delivery.
-Invitations, inventory features, and production mail hardening are still pending.
+The Product schema and migration are implemented and tested. Next are the product
+API and catalog interface, then suppliers and locations. Invitations, stock workflows,
+and production mail hardening are still pending.
 
 ## Commit Workflow
 
