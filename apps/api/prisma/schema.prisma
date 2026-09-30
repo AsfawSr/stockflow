@@ -25,6 +25,24 @@ enum AccountTokenPurpose {
   @@map("account_token_purpose")
 }
 
+enum PurchaseOrderStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+
+  @@map("purchase_order_status")
+}
+
+enum StockMovementType {
+  RECEIPT
+
+  @@map("stock_movement_type")
+}
+
 model Organization {
   id          String       @id @default(uuid()) @db.Uuid
   name        String       @db.VarChar(160)
@@ -35,6 +53,7 @@ model Organization {
   products    Product[]
   suppliers   Supplier[]
   locations   Location[]
+  purchaseOrders PurchaseOrder[]
 
   @@map("organizations")
 }
@@ -51,6 +70,7 @@ model Supplier {
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  purchaseOrders PurchaseOrder[]
 
   @@unique([organizationId, name])
   @@unique([organizationId, id])
@@ -67,6 +87,9 @@ model Location {
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  purchaseOrders PurchaseOrder[]
+  stockMovements StockMovement[]
+  stockLevels    StockLevel[]
 
   @@unique([organizationId, name])
   @@unique([organizationId, id])
@@ -85,11 +108,120 @@ model Product {
   createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  purchaseOrderLines PurchaseOrderLine[]
+  stockMovements     StockMovement[]
+  stockLevels        StockLevel[]
 
   @@unique([organizationId, sku])
   @@unique([organizationId, id])
   @@index([organizationId, archivedAt])
   @@map("products")
+}
+
+model PurchaseOrder {
+  id             String              @id @default(uuid()) @db.Uuid
+  organizationId String              @map("organization_id") @db.Uuid
+  number         Int
+  supplierId     String              @map("supplier_id") @db.Uuid
+  locationId     String              @map("location_id") @db.Uuid
+  status         PurchaseOrderStatus @default(DRAFT)
+  note           String?             @db.VarChar(1000)
+  createdById    String              @map("created_by_id") @db.Uuid
+  decidedById    String?             @map("decided_by_id") @db.Uuid
+  decisionNote   String?             @map("decision_note") @db.VarChar(1000)
+  decidedAt      DateTime?           @map("decided_at") @db.Timestamptz(3)
+  createdAt      DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  supplier       Supplier            @relation(fields: [organizationId, supplierId], references: [organizationId, id], onDelete: Restrict)
+  location       Location            @relation(fields: [organizationId, locationId], references: [organizationId, id], onDelete: Restrict)
+  createdBy      User                @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  decidedBy      User?               @relation("PurchaseOrderDecidedBy", fields: [decidedById], references: [id], onDelete: Restrict)
+  lines          PurchaseOrderLine[]
+  receipts       GoodsReceipt[]
+
+  @@unique([organizationId, number])
+  @@unique([organizationId, id])
+  @@index([organizationId, status])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id               String        @id @default(uuid()) @db.Uuid
+  organizationId   String        @map("organization_id") @db.Uuid
+  purchaseOrderId  String        @map("purchase_order_id") @db.Uuid
+  productId        String        @map("product_id") @db.Uuid
+  quantity         Int
+  unitPrice        Decimal       @map("unit_price") @db.Decimal(12, 2)
+  receivedQuantity Int           @default(0) @map("received_quantity")
+  purchaseOrder    PurchaseOrder @relation(fields: [organizationId, purchaseOrderId], references: [organizationId, id], onDelete: Cascade)
+  product          Product       @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: Restrict)
+  receiptLines     GoodsReceiptLine[]
+
+  @@unique([purchaseOrderId, productId])
+  @@unique([purchaseOrderId, id])
+  @@map("purchase_order_lines")
+}
+
+model GoodsReceipt {
+  id              String             @id @default(uuid()) @db.Uuid
+  organizationId  String             @map("organization_id") @db.Uuid
+  purchaseOrderId String             @map("purchase_order_id") @db.Uuid
+  note            String?            @db.VarChar(500)
+  receivedById    String             @map("received_by_id") @db.Uuid
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  purchaseOrder   PurchaseOrder      @relation(fields: [organizationId, purchaseOrderId], references: [organizationId, id], onDelete: Restrict)
+  receivedBy      User               @relation("GoodsReceiptReceivedBy", fields: [receivedById], references: [id], onDelete: Restrict)
+  lines           GoodsReceiptLine[]
+
+  @@index([organizationId, purchaseOrderId])
+  @@map("goods_receipts")
+}
+
+model GoodsReceiptLine {
+  id                  String            @id @default(uuid()) @db.Uuid
+  goodsReceiptId      String            @map("goods_receipt_id") @db.Uuid
+  purchaseOrderId     String            @map("purchase_order_id") @db.Uuid
+  purchaseOrderLineId String            @map("purchase_order_line_id") @db.Uuid
+  quantity            Int
+  receipt             GoodsReceipt      @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
+  orderLine           PurchaseOrderLine @relation(fields: [purchaseOrderId, purchaseOrderLineId], references: [purchaseOrderId, id], onDelete: Restrict)
+  stockMovement       StockMovement?
+
+  @@unique([goodsReceiptId, purchaseOrderLineId])
+  @@map("goods_receipt_lines")
+}
+
+model StockMovement {
+  id                 String            @id @default(uuid()) @db.Uuid
+  organizationId     String            @map("organization_id") @db.Uuid
+  productId          String            @map("product_id") @db.Uuid
+  locationId         String            @map("location_id") @db.Uuid
+  type               StockMovementType
+  quantity           Int
+  goodsReceiptLineId String?           @unique @map("goods_receipt_line_id") @db.Uuid
+  createdById        String            @map("created_by_id") @db.Uuid
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  product            Product           @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: Restrict)
+  location           Location          @relation(fields: [organizationId, locationId], references: [organizationId, id], onDelete: Restrict)
+  receiptLine        GoodsReceiptLine? @relation(fields: [goodsReceiptLineId], references: [id], onDelete: Restrict)
+  createdBy          User              @relation("StockMovementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, productId, locationId, createdAt])
+  @@map("stock_movements")
+}
+
+model StockLevel {
+  organizationId String   @map("organization_id") @db.Uuid
+  productId      String   @map("product_id") @db.Uuid
+  locationId     String   @map("location_id") @db.Uuid
+  quantity       Int
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  product        Product  @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: Restrict)
+  location       Location @relation(fields: [organizationId, locationId], references: [organizationId, id], onDelete: Restrict)
+
+  @@id([organizationId, productId, locationId])
+  @@map("stock_levels")
 }
 
 model User {
@@ -104,6 +236,10 @@ model User {
   emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(3)
   authVersion Int @default(0) @map("auth_version")
   accountTokens AccountToken[]
+  createdPurchaseOrders PurchaseOrder[] @relation("PurchaseOrderCreatedBy")
+  decidedPurchaseOrders PurchaseOrder[] @relation("PurchaseOrderDecidedBy")
+  goodsReceipts GoodsReceipt[] @relation("GoodsReceiptReceivedBy")
+  stockMovements StockMovement[] @relation("StockMovementCreatedBy")
 
   @@map("users")
 }

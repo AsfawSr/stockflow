@@ -161,6 +161,32 @@ only, matching the role model where administrators manage company settings and
 purchasing officers manage supplier relationships. `MANAGER` manages products
 but neither suppliers nor locations.
 
+## Purchase Order and Stock Ledger Model
+
+The sixth migration adds the procurement workflow and the beginning of the stock
+ledger. A `PurchaseOrder` belongs to one organization and references a supplier and
+a destination location through composite `(organizationId, id)` foreign keys, so an
+order can never point at another organization's records. Orders carry a
+per-organization sequential `number`, a status
+(`DRAFT`, `SUBMITTED`, `APPROVED`, `REJECTED`, `PARTIALLY_RECEIVED`, `RECEIVED`,
+`CANCELLED`), optional notes, the creating user, and the deciding user with a
+decision timestamp that must accompany it.
+
+`PurchaseOrderLine` stores an ordered product, a positive quantity, a non-negative
+`DECIMAL(12,2)` unit price frozen at ordering time, and a `receivedQuantity` that the
+database bounds between zero and the ordered quantity. A product may appear once per
+order. `GoodsReceipt` records who received a delivery and when; its lines reference
+order lines of the same order only and must have positive quantities.
+
+`StockMovement` is the append-oriented ledger: every quantity change references its
+product, location, creator, and cause. Receipt movements must be positive and each
+receipt line can produce exactly one movement, which makes double-posting a
+constraint violation rather than a code path. `StockLevel` is the fast-read balance
+per product and location; the database rejects negative balances. Deleting orders,
+users, or products that appear in receipts or movements is restricted to preserve
+the audit trail. Ledger tests cover order numbering, cross-tenant references,
+receipt bounds, movement shape, and delete protection; all writes roll back.
+
 
 ## Authentication API
 
