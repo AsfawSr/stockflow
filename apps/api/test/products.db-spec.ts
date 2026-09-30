@@ -47,6 +47,7 @@ describe('Product database constraints', () => {
       name: string;
       description: string | null;
       unit: string;
+      reorderPoint: number | null;
     }> = {},
   ) {
     const product = {
@@ -55,10 +56,11 @@ describe('Product database constraints', () => {
       name: 'USB-C Charger',
       description: null,
       unit: 'piece',
+      reorderPoint: null,
       ...overrides,
     };
     return client.query(
-      'INSERT INTO products (id, organization_id, sku, name, description, unit, updated_at) VALUES ($1, $2, $3, $4, $5, $6, now()) RETURNING id',
+      'INSERT INTO products (id, organization_id, sku, name, description, unit, reorder_point, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, now()) RETURNING id',
       [
         randomUUID(),
         product.organizationId,
@@ -66,6 +68,7 @@ describe('Product database constraints', () => {
         product.name,
         product.description,
         product.unit,
+        product.reorderPoint,
       ],
     );
   }
@@ -194,6 +197,21 @@ describe('Product database constraints', () => {
     { description: 'a'.repeat(2001) },
   ])('enforces product field length limits (%#)', async (overrides) => {
     await expect(insertProduct(overrides)).rejects.toMatchObject({ code: '22001' });
+  });
+
+  it.each([-1, 1000001])('rejects an out-of-range reorder point: %j', async (reorderPoint) => {
+    await expect(insertProduct({ reorderPoint })).rejects.toMatchObject({
+      code: '23514',
+      constraint: 'products_reorder_point_range',
+    });
+  });
+
+  it('accepts absent, zero, and bounded reorder points', async () => {
+    await expect(insertProduct({ reorderPoint: 0 })).resolves.toMatchObject({ rowCount: 1 });
+    await expect(
+      insertProduct({ sku: 'USB-C_65W.02', reorderPoint: 1000000 }),
+    ).resolves.toMatchObject({ rowCount: 1 });
+    await expect(insertProduct({ sku: 'USB-C_65W.03' })).resolves.toMatchObject({ rowCount: 1 });
   });
 
   it('rejects products without an organization', async () => {
