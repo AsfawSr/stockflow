@@ -1,0 +1,74 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import {
+  catalogQuerySchema,
+  productInputSchema,
+  productListSchema,
+  productSchema,
+} from '../src/lib/contracts';
+
+const product = {
+  id: '8ed13b94-fd8b-4079-848e-f22edaa8ce05',
+  sku: 'USB-C_65W.01',
+  name: 'USB-C Charger',
+  description: null,
+  unit: 'piece',
+  archivedAt: null,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+};
+
+test('normalizes product input and stores empty descriptions as null', () => {
+  const parsed = productInputSchema.parse({
+    sku: ' usb-c_65w.01 ',
+    name: ' USB-C Charger ',
+    unit: ' piece ',
+    description: '  ',
+  });
+  assert.deepEqual(parsed, {
+    sku: 'USB-C_65W.01',
+    name: 'USB-C Charger',
+    unit: 'piece',
+    description: null,
+  });
+});
+
+test('rejects malformed SKUs, blank fields, and oversized input', () => {
+  const valid = { sku: 'SKU-01', name: 'Product', unit: 'piece', description: '' };
+  assert.equal(productInputSchema.safeParse(valid).success, true);
+  for (const invalid of [
+    { ...valid, sku: 'SKU 01' },
+    { ...valid, sku: '-SKU' },
+    { ...valid, sku: '' },
+    { ...valid, sku: 'A'.repeat(65) },
+    { ...valid, name: '   ' },
+    { ...valid, unit: ' ' },
+    { ...valid, description: 'a'.repeat(2001) },
+  ]) {
+    assert.equal(productInputSchema.safeParse(invalid).success, false, JSON.stringify(invalid));
+  }
+});
+
+test('accepts archived products and rejects malformed list responses', () => {
+  assert.equal(productSchema.safeParse(product).success, true);
+  assert.equal(
+    productSchema.safeParse({ ...product, archivedAt: new Date().toISOString() }).success,
+    true,
+  );
+  assert.equal(productSchema.safeParse({ ...product, archivedAt: 'soon' }).success, false);
+  const list = { items: [product], total: 1, page: 1, pageSize: 20 };
+  assert.equal(productListSchema.safeParse(list).success, true);
+  assert.equal(productListSchema.safeParse({ ...list, total: -1 }).success, false);
+  assert.equal(productListSchema.safeParse({ ...list, items: [{ id: 'x' }] }).success, false);
+});
+
+test('parses catalog queries and rejects unknown status or invalid pages', () => {
+  assert.deepEqual(catalogQuerySchema.parse({ search: ' usb ', status: 'all', page: '2' }), {
+    search: 'usb',
+    status: 'all',
+    page: 2,
+  });
+  assert.equal(catalogQuerySchema.safeParse({ status: 'deleted' }).success, false);
+  assert.equal(catalogQuerySchema.safeParse({ page: '0' }).success, false);
+  assert.equal(catalogQuerySchema.safeParse({ page: 'many' }).success, false);
+});

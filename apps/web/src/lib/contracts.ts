@@ -69,7 +69,49 @@ export const organizationInputSchema = z.object({
   currency: z.string().regex(/^[A-Z]{3}$/, 'Choose a currency.'),
 });
 
+export const productSchema = z.object({
+  id: z.uuid(),
+  sku: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().nullable(),
+  unit: z.string().min(1),
+  archivedAt: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export const productListSchema = z.object({
+  items: z.array(productSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export const productInputSchema = z.object({
+  sku: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .min(1, 'Enter a SKU.')
+    .max(64, 'Use at most 64 characters.')
+    .regex(/^[A-Z0-9][A-Z0-9._-]*$/, 'Use letters, digits, dots, underscores, or hyphens.'),
+  name: z.string().trim().min(1, 'Enter a product name.').max(160),
+  unit: z.string().trim().min(1, 'Enter a stock unit, such as piece or kg.').max(32),
+  description: z
+    .string()
+    .trim()
+    .max(2000, 'Use at most 2,000 characters.')
+    .transform((value) => value || null),
+});
+export const productStatusSchema = z.enum(['active', 'archived', 'all']);
+export const catalogQuerySchema = z.object({
+  search: z.string().trim().max(160).optional(),
+  status: productStatusSchema.optional(),
+  page: z.coerce.number().int().min(1).max(100000).optional(),
+});
+
 export type UserProfile = z.infer<typeof userSchema>;
+export type Product = z.infer<typeof productSchema>;
+export type ProductList = z.infer<typeof productListSchema>;
+export type ProductStatus = z.infer<typeof productStatusSchema>;
 export type Organization = z.infer<typeof membershipSchema>;
 export type Role = z.infer<typeof roleSchema>;
 export type FormState = {

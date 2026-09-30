@@ -52,6 +52,9 @@ test.afterAll(async () => {
     );
     if (foreign.rows[0].count)
       throw new Error('Refusing to clean test organizations with non-test members.');
+    await database.query('DELETE FROM products WHERE organization_id = ANY($1::uuid[])', [
+      ownedIds,
+    ]);
     await database.query(
       'DELETE FROM memberships WHERE organization_id = ANY($1::uuid[]) AND user_id = ANY($2::uuid[])',
       [ownedIds, userIds],
@@ -199,6 +202,62 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await page.getByRole('button', { name: 'Save name', exact: true }).click();
   await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
   await expect(page.getByRole('status')).toContainText('Organization updated.');
+
+  await page.getByRole('link', { name: 'Products', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'No products yet', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'New product', exact: true }).click();
+  const createDialog = page.getByRole('dialog', { name: 'New product', exact: true });
+  await createDialog.getByLabel('SKU', { exact: true }).fill(' usb-c_65w.01 ');
+  await createDialog.getByLabel('Product name', { exact: true }).fill('USB-C Charger');
+  await createDialog.getByLabel('Stock unit', { exact: true }).fill('piece');
+  await createDialog.getByRole('button', { name: 'Create product', exact: true }).click();
+  await expect(createDialog).not.toBeVisible();
+  await expect(page.getByText('USB-C_65W.01', { exact: true })).toBeVisible();
+
+  await page.getByRole('button', { name: 'New product', exact: true }).click();
+  await createDialog.getByLabel('SKU', { exact: true }).fill('USB-C_65W.01');
+  await createDialog.getByLabel('Product name', { exact: true }).fill('Duplicate Charger');
+  await createDialog.getByLabel('Stock unit', { exact: true }).fill('piece');
+  await createDialog.getByRole('button', { name: 'Create product', exact: true }).click();
+  await expect(createDialog.getByRole('alert')).toContainText(
+    'This SKU is already used in this organization.',
+  );
+  await createDialog.getByLabel('SKU', { exact: true }).fill('CABLE-01');
+  await createDialog.getByRole('button', { name: 'Create product', exact: true }).click();
+  await expect(createDialog).not.toBeVisible();
+  await expect(page.getByText('CABLE-01', { exact: true })).toBeVisible();
+
+  await page.getByLabel('Search products', { exact: true }).fill('usb');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page).toHaveURL(/\/products\?search=usb&status=active$/);
+  await expect(page.getByText('CABLE-01', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('USB-C_65W.01', { exact: true })).toBeVisible();
+  await checkLayouts(page);
+  await page.screenshot({ path: testInfo.outputPath('products-desktop.png'), fullPage: true });
+
+  await page.getByRole('button', { name: 'Edit USB-C_65W.01', exact: true }).click();
+  const editDialog = page.getByRole('dialog', { name: 'Edit USB-C_65W.01', exact: true });
+  await editDialog.getByLabel('Product name', { exact: true }).fill('USB-C Charger 65W');
+  await editDialog.getByLabel('Description (optional)', { exact: true }).fill('Fast charger');
+  await editDialog.getByRole('button', { name: 'Save product', exact: true }).click();
+  await expect(editDialog).not.toBeVisible();
+  await expect(page.getByText('USB-C Charger 65W', { exact: true })).toBeVisible();
+  await expect(
+    page.locator('.member-name').getByText('Fast charger', { exact: true }),
+  ).toBeVisible();
+
+  await page.getByRole('button', { name: 'Archive USB-C_65W.01', exact: true }).click();
+  await expect(page.getByText('USB-C_65W.01', { exact: true })).toHaveCount(0);
+  await page.getByLabel('Show', { exact: true }).selectOption('archived');
+  await page.getByLabel('Search products', { exact: true }).fill('');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page.getByText('USB-C_65W.01', { exact: true })).toBeVisible();
+  await expect(page.locator('.badge.offline')).toContainText('Archived');
+  await page.getByRole('button', { name: 'Restore USB-C_65W.01', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'No archived products' })).toBeVisible();
+  await page.getByRole('link', { name: 'Overview', exact: true }).click();
+  await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
+
   await page.getByRole('link', { name: 'Switch organization', exact: true }).click();
   const secondId = await createOrganization(page, longName, 'USD');
   await checkLayouts(page);
@@ -224,6 +283,10 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await page.reload();
   await expect(page.getByRole('button', { name: 'Save name', exact: true })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Members', exact: true })).toHaveCount(0);
+  await page.getByRole('link', { name: 'Products', exact: true }).click();
+  await expect(page.getByText('USB-C_65W.01', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'New product', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Edit USB-C_65W.01', exact: true })).toHaveCount(0);
   await database.query('DELETE FROM memberships WHERE organization_id = $1 AND user_id = $2', [
     secondId,
     userId,

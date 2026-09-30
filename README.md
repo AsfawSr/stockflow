@@ -237,8 +237,12 @@ launch, add a durable mail queue, retry/monitoring, and appropriate abuse contro
 - `/organizations` lists only current memberships, supports name search, and creates
 	organizations with a currency selected from the platform's supported currencies.
 - `/workspace/:organizationId` shows the real organization and current roles.
-	Admins can rename the organization and inspect its members; other members cannot.
-- `/status` remains public and displays web, API, and PostgreSQL health.
+	Admins can rename the organization and inspect its members; other members cannot.- `/workspace/:organizationId/products` lists the organization's catalog with search,
+  an active/archived/all filter, and pagination. Admins and managers create, edit,
+  archive, and restore products through dialogs; other members see a read-only list.
+  Search, filter, and paging run server-side through GET parameters, so catalog URLs
+  are shareable. Product mutations are server actions that revalidate the list, map
+  duplicate SKUs to a clear message, and never expose other organizations' data.- `/status` remains public and displays web, API, and PostgreSQL health.
 - `/verify-email` gates unverified accounts; `/verify-email/confirm` consumes email links.
 - `/forgot-password` requests recovery; `/reset-password` accepts a new password from a valid link.
 
@@ -384,7 +388,9 @@ Playwright starts or reuses local servers on ports 3000 and 3001. Use a developm
 or test database with migrations applied and `MAIL_TRANSPORT=file`, never production
 or external SMTP. It verifies signup, verification/resend, reset and replay rejection,
 login, logout, expiry, cookie privacy, cross-origin action rejection, organization
-creation/selection/renaming, and permission revocation. It checks desktop, tablet,
+creation/selection/renaming, permission revocation, and the product catalog:
+creation, duplicate-SKU errors, search, editing, archive/restore, and hidden manage
+controls for warehouse-only members. It checks desktop, tablet,
 and mobile widths, including long organization names, and saves ignored screenshots
 under `apps/web/test-results`. Browser fixture records are committed during the
 workflow, then removed in `afterAll` using unique run-specific names and ids; the
@@ -413,8 +419,9 @@ and the initial workspace are connected to the real API. Email verification and
 password reset are implemented with local-file and configurable SMTP delivery.
 The Product schema and migration are implemented and tested, and the product API
 now provides listed, searchable, role-protected create/edit/archive/restore
-endpoints. Next is the frontend catalog interface, then suppliers and locations.
-Invitations, stock workflows, and production mail hardening are still pending.
+endpoints with a matching workspace catalog interface. Next are suppliers and
+locations. Invitations, stock workflows, and production mail hardening are still
+pending.
 
 ## Commit Workflow
 

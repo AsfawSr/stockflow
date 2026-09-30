@@ -13,6 +13,8 @@ import {
   organizationIdSchema,
   organizationInputSchema,
   organizationSchema,
+  productInputSchema,
+  productSchema,
   sessionSchema,
   signupSchema,
   type FormState,
@@ -195,4 +197,85 @@ export async function renameOrganizationAction(
   revalidatePath('/organizations');
   revalidatePath(`/workspace/${id.data}`);
   return { success: 'Organization updated.' };
+}
+
+const duplicateSkuMessage = 'This SKU is already used in this organization.';
+
+function productFormValues(form: FormData) {
+  return {
+    sku: String(form.get('sku') ?? ''),
+    name: String(form.get('name') ?? ''),
+    unit: String(form.get('unit') ?? ''),
+    description: String(form.get('description') ?? ''),
+  };
+}
+
+export async function createProductAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  if (!organizationId.success) return { error: 'Choose a valid organization.' };
+  const values = productFormValues(form);
+  const parsed = productInputSchema.safeParse(values);
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors, values };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/products`,
+    productSchema,
+    {
+      method: 'POST',
+      body: parsed.data,
+    },
+  );
+  if (!result.ok)
+    return { error: result.status === 409 ? duplicateSkuMessage : result.error, values };
+  revalidatePath(`/workspace/${organizationId.data}/products`);
+  return { success: 'Product created.' };
+}
+
+export async function updateProductAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const productId = organizationIdSchema.safeParse(form.get('productId'));
+  if (!organizationId.success || !productId.success)
+    return { error: 'This product is no longer available.' };
+  const values = productFormValues(form);
+  const parsed = productInputSchema.safeParse(values);
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors, values };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/products/${productId.data}`,
+    productSchema,
+    { method: 'PATCH', body: parsed.data },
+  );
+  if (!result.ok)
+    return { error: result.status === 409 ? duplicateSkuMessage : result.error, values };
+  revalidatePath(`/workspace/${organizationId.data}/products`);
+  return { success: 'Product updated.' };
+}
+
+export async function setProductArchivedAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const productId = organizationIdSchema.safeParse(form.get('productId'));
+  const archive = form.get('archive') === 'true';
+  if (!organizationId.success || !productId.success)
+    return { error: 'This product is no longer available.' };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/products/${productId.data}/${archive ? 'archive' : 'restore'}`,
+    productSchema,
+    { method: 'POST' },
+  );
+  if (!result.ok)
+    return {
+      error:
+        result.status === 409
+          ? 'This product was already changed. Refresh and try again.'
+          : result.error,
+    };
+  revalidatePath(`/workspace/${organizationId.data}/products`);
+  return { success: archive ? 'Product archived.' : 'Product restored.' };
 }

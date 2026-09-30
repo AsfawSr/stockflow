@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Activity, Building2, LayoutDashboard, LogOut } from 'lucide-react';
+import { Activity, Building2, LayoutDashboard, LogOut, Package } from 'lucide-react';
 import { logoutAction } from '@/app/actions';
 import type { Organization, UserProfile } from '@/lib/contracts';
 import { Brand } from './brand';
@@ -13,7 +13,7 @@ export function AppShell({
 }: {
   user?: UserProfile;
   organization?: Organization;
-  section: 'Organizations' | 'Overview' | 'System status';
+  section: 'Organizations' | 'Overview' | 'Products' | 'System status';
   children: React.ReactNode;
 }) {
   return (
@@ -52,6 +52,16 @@ export function AppShell({
             >
               <LayoutDashboard size={18} aria-hidden="true" />
               Overview
+            </Link>
+          )}
+          {organization && (
+            <Link
+              className="nav-item"
+              href={`/workspace/${organization.id}/products`}
+              aria-current={section === 'Products' ? 'page' : undefined}
+            >
+              <Package size={18} aria-hidden="true" />
+              Products
             </Link>
           )}
           <Link
