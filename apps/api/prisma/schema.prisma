@@ -39,6 +39,9 @@ enum PurchaseOrderStatus {
 
 enum StockMovementType {
   RECEIPT
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT
 
   @@map("stock_movement_type")
 }
@@ -90,6 +93,9 @@ model Location {
   purchaseOrders PurchaseOrder[]
   stockMovements StockMovement[]
   stockLevels    StockLevel[]
+  transfersFrom  StockTransfer[] @relation("TransferFrom")
+  transfersTo    StockTransfer[] @relation("TransferTo")
+  stockAdjustments StockAdjustment[]
 
   @@unique([organizationId, name])
   @@unique([organizationId, id])
@@ -111,6 +117,8 @@ model Product {
   purchaseOrderLines PurchaseOrderLine[]
   stockMovements     StockMovement[]
   stockLevels        StockLevel[]
+  stockTransfers     StockTransfer[]
+  stockAdjustments   StockAdjustment[]
 
   @@unique([organizationId, sku])
   @@unique([organizationId, id])
@@ -200,15 +208,58 @@ model StockMovement {
   type               StockMovementType
   quantity           Int
   goodsReceiptLineId String?           @unique @map("goods_receipt_line_id") @db.Uuid
+  stockTransferId    String?           @map("stock_transfer_id") @db.Uuid
+  stockAdjustmentId  String?           @unique @map("stock_adjustment_id") @db.Uuid
   createdById        String            @map("created_by_id") @db.Uuid
   createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
   product            Product           @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: Restrict)
   location           Location          @relation(fields: [organizationId, locationId], references: [organizationId, id], onDelete: Restrict)
   receiptLine        GoodsReceiptLine? @relation(fields: [goodsReceiptLineId], references: [id], onDelete: Restrict)
+  transfer           StockTransfer?    @relation(fields: [stockTransferId], references: [id], onDelete: Restrict)
+  adjustment         StockAdjustment?  @relation(fields: [stockAdjustmentId], references: [id], onDelete: Restrict)
   createdBy          User              @relation("StockMovementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   @@index([organizationId, productId, locationId, createdAt])
+  @@index([organizationId, createdAt])
   @@map("stock_movements")
+}
+
+model StockTransfer {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  productId      String   @map("product_id") @db.Uuid
+  fromLocationId String   @map("from_location_id") @db.Uuid
+  toLocationId   String   @map("to_location_id") @db.Uuid
+  quantity       Int
+  note           String?  @db.VarChar(500)
+  createdById    String   @map("created_by_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  product        Product  @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: Restrict)
+  fromLocation   Location @relation("TransferFrom", fields: [organizationId, fromLocationId], references: [organizationId, id], onDelete: Restrict)
+  toLocation     Location @relation("TransferTo", fields: [organizationId, toLocationId], references: [organizationId, id], onDelete: Restrict)
+  createdBy      User     @relation("StockTransferCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  movements      StockMovement[]
+
+  @@index([organizationId, createdAt])
+  @@map("stock_transfers")
+}
+
+model StockAdjustment {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  productId      String   @map("product_id") @db.Uuid
+  locationId     String   @map("location_id") @db.Uuid
+  quantity       Int
+  reason         String   @db.VarChar(500)
+  createdById    String   @map("created_by_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  product        Product  @relation(fields: [organizationId, productId], references: [organizationId, id], onDelete: Restrict)
+  location       Location @relation(fields: [organizationId, locationId], references: [organizationId, id], onDelete: Restrict)
+  createdBy      User     @relation("StockAdjustmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  movement       StockMovement?
+
+  @@index([organizationId, createdAt])
+  @@map("stock_adjustments")
 }
 
 model StockLevel {
@@ -240,6 +291,8 @@ model User {
   decidedPurchaseOrders PurchaseOrder[] @relation("PurchaseOrderDecidedBy")
   goodsReceipts GoodsReceipt[] @relation("GoodsReceiptReceivedBy")
   stockMovements StockMovement[] @relation("StockMovementCreatedBy")
+  stockTransfers StockTransfer[] @relation("StockTransferCreatedBy")
+  stockAdjustments StockAdjustment[] @relation("StockAdjustmentCreatedBy")
 
   @@map("users")
 }
