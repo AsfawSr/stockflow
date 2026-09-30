@@ -5,7 +5,7 @@ import '@fontsource/ibm-plex-sans/600.css';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'StockFlow | System Status',
+  title: { default: 'StockFlow', template: '%s | StockFlow' },
   description: 'StockFlow inventory and procurement workspace.',
 };
 

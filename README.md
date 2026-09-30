@@ -33,6 +33,8 @@ Real environment files are ignored by Git and must never be committed.
 The API requires `DATABASE_URL` at startup and opens database connections lazily.
 This allows liveness to remain available during a database outage. The database
 pool has bounded connection and statement timeouts and closes on application shutdown.
+Prisma connections use UTC explicitly. This avoids timestamp decoding offsets when
+PostgreSQL's server timezone differs, including incorrect session-expiry decisions.
 The default `postgres` account is suitable only for initial local setup; use a
 dedicated, least-privilege database account before deployment.
 
@@ -105,12 +107,44 @@ other API routes are limited to 120 per minute. Health checks are exempt. These
 counters are in memory for the current single-process deployment; production scaling
 requires shared rate-limit storage and a carefully configured trusted proxy.
 
-This is the backend authentication milestone. The Next.js login UI is not connected
-yet; its eventual server-side session layer should keep bearer tokens out of browser
-localStorage. Use HTTPS outside local development. Email verification, password
+The Next.js interface uses server actions and HTTP-only session cookies; bearer
+tokens are never returned to client components or stored in localStorage.
+Use HTTPS outside local development. Email verification, password
 reset/change, scheduled expired-session cleanup, and distributed rate limiting are
 still required before public production use. Registration does not verify email
 ownership, and its conflict response can reveal account existence.
+
+## Frontend Account Workflow
+
+- `/` opens sign-in or the last selected organization, with access checked by NestJS.
+- `/login` and `/signup` include validated fields, password visibility controls,
+	matching password confirmation, pending states, and safe API error messages.
+- `/organizations` lists only current memberships, supports name search, and creates
+	organizations with a currency selected from the platform's supported currencies.
+- `/workspace/:organizationId` shows the real organization and current roles.
+	Admins can rename the organization and inspect its members; other members cannot.
+- `/status` remains public and displays web, API, and PostgreSQL health.
+
+Authentication cookies are HTTP-only, SameSite=Lax, and expire with the API session.
+Production uses Secure cookies with `__Host-` names and requires HTTPS; local
+`next dev` uses unprefixed cookies over HTTP. The selected-organization cookie is
+only a navigation preference: every selection and workspace request revalidates
+membership with the API. It never grants authorization by itself.
+
+Only Next.js server code sends bearer tokens to NestJS. Server actions use Next.js's
+same-origin checks; do not broaden allowed origins without reviewing the deployment.
+Upstream requests are uncached, have bounded timeouts, reject redirects, and validate
+response shapes. API error bodies are not exposed to users. An unavailable API keeps
+the session cookie and offers retry, whereas a 401 sends the user to sign-in.
+Logout clears local cookies even if the API is down and warns when revocation could
+not be confirmed. No password or token is included in form error state.
+
+Server-to-server requests currently share the Next.js server's source IP for NestJS
+rate limiting. Before public deployment, add trusted-ingress client attribution and
+appropriate shared/per-client abuse limits; do not blindly trust forwarded headers.
+This is not yet a production-ready identity service: email verification, recovery,
+and the other hardening items above are still pending. No inactive recovery links
+or simulated inventory screens are presented in this milestone.
 
 ## Organization Access
 
@@ -163,9 +197,9 @@ In a second terminal, also from the repository root:
 npm run dev:web
 ```
 
-Open `http://127.0.0.1:3000` for the Next.js system-status page. Refresh status
-performs a new server-side API check. A stopped API displays an unavailable state
-instead of breaking the page. The frontend login UI is not implemented yet.
+Open `http://127.0.0.1:3000` to sign in or create an account, then create or select an
+organization. `http://127.0.0.1:3000/status` remains the system-status screen, with
+fresh server-side checks on refresh.
 
 The API runs at `http://127.0.0.1:3001`. `GET /api/health` returns
 `{"status":"ok","service":"stockflow-api"}`. This is a liveness check independent
@@ -219,9 +253,22 @@ and live permission changes using the same session token.
 All fixture writes run inside transactions that roll back,
 including the Prisma success path. The tests neither reset nor truncate tables.
 
-The initial UI was also checked in a browser at desktop, tablet, and mobile sizes,
-including refresh recovery after starting the API. These manual browser checks are
-not yet part of the automated test suite.
+For the persistent browser workflow test, install Chromium once and run:
+
+```sh
+npm exec --workspace=@stockflow/web -- playwright install chromium
+npm run test:e2e
+```
+
+Playwright starts or reuses local servers on ports 3000 and 3001. Use a development
+or test database with migrations applied, never production. It verifies signup,
+login, logout, expiry, cookie privacy, cross-origin action rejection, organization
+creation/selection/renaming, and permission revocation. It checks desktop, tablet,
+and mobile widths, including long organization names, and saves ignored screenshots
+under `apps/web/test-results`. Browser fixture records are committed during the
+workflow, then removed in `afterAll` using unique run-specific names and ids; the
+cleanup refuses organizations with non-test members. It never resets or truncates
+the database. Browser tests are opt-in and separate from `npm test` and `test:db`.
 
 ESLint stays on 9.39.x for compatibility with the React plugin shipped by the current
 Next.js lint configuration. ESLint 10 currently fails with a removed `getFilename`
@@ -239,8 +286,9 @@ Prisma and the API readiness endpoint are implemented. Organization, user, and
 membership models now have a committed migration and database constraint tests.
 Backend registration, login, and revocable sessions are implemented. No inventory
 data is mocked or stored yet. Organization creation, scoped access, and admin guards
-are implemented and tested. The next user-facing step is the frontend login and
-organization-selection workflow, followed by invitations and inventory features.
+are implemented and tested. Frontend signup, login, logout, organization selection,
+and the initial workspace are now connected to the real API. Email verification,
+password reset, invitations, and inventory features are still pending.
 
 ## Commit Workflow
 
