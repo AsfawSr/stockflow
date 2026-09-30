@@ -103,6 +103,15 @@ an organization's active or archived catalog. These keys do not replace membersh
 authorization: product API endpoints combine both, and every product query is
 filtered by the organization in the URL after the membership guard passes.
 
+`Supplier` and `Location` follow the same organization-owned pattern with the
+fifth migration. A supplier has a name (160), optional contact name, email, phone,
+and address; a location has a name (120) and optional address. Names are unique per
+organization and stay reserved while archived. Optional fields reject
+whitespace-only values, supplier emails must be stored lowercase without spaces,
+and phone numbers allow 3-32 digits with `+ ( ) . / -` separators and at least one
+digit. Both tables restrict organization deletion and use the same archive
+timestamps and scoped `(organizationId, id)` keys as products.
+
 The product database tests are included in `npm run test:db`. They exercise Prisma
 create/archive/restore behavior, scoped identifiers, SKU uniqueness and format,
 field limits, and referential integrity. All product test writes are rolled back.

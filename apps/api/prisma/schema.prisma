@@ -33,8 +33,45 @@ model Organization {
   updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
   memberships Membership[]
   products    Product[]
+  suppliers   Supplier[]
+  locations   Location[]
 
   @@map("organizations")
+}
+
+model Supplier {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  name           String       @db.VarChar(160)
+  contactName    String?      @map("contact_name") @db.VarChar(120)
+  email          String?      @db.VarChar(254)
+  phone          String?      @db.VarChar(32)
+  address        String?      @db.VarChar(500)
+  archivedAt     DateTime?    @map("archived_at") @db.Timestamptz(3)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, name])
+  @@unique([organizationId, id])
+  @@index([organizationId, archivedAt])
+  @@map("suppliers")
+}
+
+model Location {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  name           String       @db.VarChar(120)
+  address        String?      @db.VarChar(500)
+  archivedAt     DateTime?    @map("archived_at") @db.Timestamptz(3)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, name])
+  @@unique([organizationId, id])
+  @@index([organizationId, archivedAt])
+  @@map("locations")
 }
 
 model Product {
