@@ -187,6 +187,39 @@ users, or products that appear in receipts or movements is restricted to preserv
 the audit trail. Ledger tests cover order numbering, cross-tenant references,
 receipt bounds, movement shape, and delete protection; all writes roll back.
 
+## Purchase Order API
+
+Order routes live under `/organizations/:organizationId/purchase-orders` with the
+same guards as the other tenant APIs. Any member reads orders. Purchasers (or
+admins) create drafts, edit draft headers and lines, submit, and cancel; managers
+(or admins) approve or reject submitted orders; warehouse members (or admins)
+record receipts. Rejection requires a reason; approval accepts an optional note,
+and the decision records who decided and when.
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | `/` | Lists orders with status filter and pagination, newest first, including totals. |
+| POST | `/` | Creates a draft against an active supplier and location; numbering is serialized per organization. |
+| GET | `/:orderId` | Full detail: lines, receipts, decision, computed totals. |
+| PATCH | `/:orderId` | Draft-only header changes (supplier, location, note). |
+| POST/PATCH/DELETE | `/:orderId/lines[/:lineId]` | Draft-only line management; one line per product, positive quantity, `DECIMAL` price. |
+| POST | `/:orderId/submit` | Draft with at least one line becomes `SUBMITTED`. |
+| POST | `/:orderId/approve` `/reject` | Submitted orders only; rejection requires a note. |
+| POST | `/:orderId/cancel` | Draft/submitted orders, or approved orders with no receipts. |
+| POST | `/:orderId/receipts` | Approved or partially received orders; posts the delivery to the ledger. |
+
+Receiving locks the order row, so competing receipts for the last remaining units
+resolve to exactly one success and one conflict. Each receipt line increments the
+order line's received quantity, appends one `RECEIPT` stock movement, and updates
+the destination location's stock level in the same transaction; order status
+becomes `PARTIALLY_RECEIVED` or `RECEIVED` from the resulting sums. Over-receipt,
+duplicate lines in one receipt, wrong-state transitions, archived partners or
+products, and cross-tenant references are rejected. Prices are returned as fixed
+two-decimal strings computed with decimal arithmetic, never floats. The tests
+cover the full lifecycle, the state machine, role separation, isolation, and
+committed-data concurrency for receipts and numbering.
+
+
 
 ## Authentication API
 
