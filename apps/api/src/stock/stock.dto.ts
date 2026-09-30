@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -62,6 +63,10 @@ export class StockLevelsQueryDto {
   @IsOptional()
   @IsUUID()
   locationId?: string;
+
+  @IsOptional()
+  @IsIn(['true', 'false'])
+  low?: string;
 
   @IsOptional()
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))

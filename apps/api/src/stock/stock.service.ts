@@ -8,7 +8,7 @@ import {
   StockMovementsQueryDto,
 } from './stock.dto';
 
-const productSelect = { id: true, sku: true, name: true, unit: true } as const;
+const productSelect = { id: true, sku: true, name: true, unit: true, reorderPoint: true } as const;
 const locationSelect = { id: true, name: true } as const;
 
 @Injectable()
@@ -18,6 +18,7 @@ export class StockService {
   async levels(organizationId: string, query: StockLevelsQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
+    if (query.low === 'true') return this.lowLevels(organizationId, query, page, pageSize);
     const where: Prisma.StockLevelWhereInput = {
       organizationId,
       ...(query.locationId ? { locationId: query.locationId } : {}),
@@ -47,9 +48,67 @@ export class StockService {
         product: level.product,
         location: level.location,
         quantity: level.quantity,
+        low: level.product.reorderPoint !== null && level.quantity <= level.product.reorderPoint,
         updatedAt: level.updatedAt,
       })),
       total,
+      page,
+      pageSize,
+    };
+  }
+
+  // Prisma cannot compare a column against a related column, so the low-stock report joins in SQL.
+  private async lowLevels(
+    organizationId: string,
+    query: StockLevelsQueryDto,
+    page: number,
+    pageSize: number,
+  ) {
+    const search = query.search ? `%${query.search.replace(/[\\%_]/g, '\\$&')}%` : null;
+    const locationId = query.locationId ?? null;
+    const rows = await (this.prisma.$queryRaw`
+      SELECT p.id AS product_id, p.sku, p.name AS product_name, p.unit,
+             p.reorder_point, l.id AS location_id, l.name AS location_name,
+             sl.quantity, sl.updated_at, (count(*) OVER ())::int AS total
+      FROM stock_levels sl
+      JOIN products p ON p.organization_id = sl.organization_id AND p.id = sl.product_id
+      JOIN locations l ON l.organization_id = sl.organization_id AND l.id = sl.location_id
+      WHERE sl.organization_id = ${organizationId}::uuid
+        AND p.reorder_point IS NOT NULL
+        AND sl.quantity <= p.reorder_point
+        AND (${locationId}::uuid IS NULL OR sl.location_id = ${locationId}::uuid)
+        AND (${search}::text IS NULL OR p.name ILIKE ${search} OR p.sku LIKE upper(${search}))
+      ORDER BY p.name ASC, l.name ASC
+      LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}
+    ` as Promise<
+      {
+        product_id: string;
+        sku: string;
+        product_name: string;
+        unit: string;
+        reorder_point: number;
+        location_id: string;
+        location_name: string;
+        quantity: number;
+        updated_at: Date;
+        total: number;
+      }[]
+    >);
+    return {
+      items: rows.map((row) => ({
+        product: {
+          id: row.product_id,
+          sku: row.sku,
+          name: row.product_name,
+          unit: row.unit,
+          reorderPoint: row.reorder_point,
+        },
+        location: { id: row.location_id, name: row.location_name },
+        quantity: row.quantity,
+        low: true,
+        updatedAt: row.updated_at,
+      })),
+      total: rows[0]?.total ?? 0,
       page,
       pageSize,
     };

@@ -1,5 +1,15 @@
 import { Transform, Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+  ValidateIf,
+} from 'class-validator';
 
 const trimmed = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -35,6 +45,13 @@ export class CreateProductDto {
   @IsString()
   @MaxLength(2000)
   description?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(0)
+  @Max(1000000)
+  reorderPoint?: number | null;
 }
 
 export class UpdateProductDto {
@@ -66,6 +83,13 @@ export class UpdateProductDto {
   @IsString()
   @MaxLength(2000)
   description?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsInt()
+  @Min(0)
+  @Max(1000000)
+  reorderPoint?: number | null;
 }
 
 export class ListProductsDto {

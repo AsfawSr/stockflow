@@ -212,6 +212,48 @@ describe('Stock APIs against PostgreSQL', () => {
         .expect(200);
       expect(storeMovements.body.total).toBe(1);
       expect(storeMovements.body.items[0].type).toBe('TRANSFER_IN');
+
+      // Low-stock flags and the low-only report follow the product's reorder point.
+      expect(levels.body.items.map((item: { low: boolean }) => item.low)).toEqual([false, false]);
+      await request(app.getHttpServer())
+        .patch(`/api/organizations/${seedData.organizationId}/products/${productId}`)
+        .set('Authorization', owner.auth)
+        .send({ reorderPoint: 4 })
+        .expect(200);
+      const flagged = await request(app.getHttpServer())
+        .get(`${base}/levels`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      expect(
+        flagged.body.items.map((item: { quantity: number; low: boolean }) => [
+          item.quantity,
+          item.low,
+        ]),
+      ).toEqual([
+        [5, false],
+        [4, true],
+      ]);
+      const lowOnly = await request(app.getHttpServer())
+        .get(`${base}/levels?low=true`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      expect(lowOnly.body.total).toBe(1);
+      expect(lowOnly.body.items[0]).toMatchObject({
+        quantity: 4,
+        low: true,
+        location: { name: 'Retail Store' },
+        product: { sku: 'STOCK-01', reorderPoint: 4 },
+      });
+      const lowElsewhere = await request(app.getHttpServer())
+        .get(`${base}/levels?low=true&locationId=${mainId}`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      expect(lowElsewhere.body.total).toBe(0);
+      const lowSearched = await request(app.getHttpServer())
+        .get(`${base}/levels?low=true&search=stock`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      expect(lowSearched.body.items).toHaveLength(1);
     });
   }, 60000);
 

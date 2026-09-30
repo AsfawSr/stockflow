@@ -110,6 +110,7 @@ describe('Product API against PostgreSQL', () => {
         name: 'USB-C Charger',
         unit: 'piece',
         description: null,
+        reorderPoint: null,
         archivedAt: null,
       });
       const productId = created.body.id as string;
@@ -147,11 +148,26 @@ describe('Product API against PostgreSQL', () => {
       const updated = await request(app.getHttpServer())
         .patch(`${base}/${productId}`)
         .set('Authorization', owner.auth)
-        .send({ name: 'USB-C Charger 65W', description: ' Fast charger ' })
+        .send({ name: 'USB-C Charger 65W', description: ' Fast charger ', reorderPoint: 5 })
         .expect(200);
       expect(updated.body.name).toBe('USB-C Charger 65W');
       expect(updated.body.description).toBe('Fast charger');
       expect(updated.body.sku).toBe('USB-C_65W.01');
+      expect(updated.body.reorderPoint).toBe(5);
+
+      const cleared = await request(app.getHttpServer())
+        .patch(`${base}/${productId}`)
+        .set('Authorization', owner.auth)
+        .send({ reorderPoint: null })
+        .expect(200);
+      expect(cleared.body.reorderPoint).toBeNull();
+      for (const reorderPoint of [-1, 1.5, 1000001, 'ten']) {
+        await request(app.getHttpServer())
+          .patch(`${base}/${productId}`)
+          .set('Authorization', owner.auth)
+          .send({ reorderPoint })
+          .expect(400);
+      }
 
       const archived = await request(app.getHttpServer())
         .post(`${base}/${productId}/archive`)

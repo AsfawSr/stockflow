@@ -9,6 +9,7 @@ const productSelect = {
   name: true,
   description: true,
   unit: true,
+  reorderPoint: true,
   archivedAt: true,
   createdAt: true,
   updatedAt: true,
@@ -72,6 +73,7 @@ export class ProductsService {
           name: input.name,
           unit: input.unit,
           description: input.description ?? null,
+          reorderPoint: input.reorderPoint ?? null,
         },
         select: productSelect,
       });
@@ -90,6 +92,7 @@ export class ProductsService {
           ...(input.name !== undefined ? { name: input.name } : {}),
           ...(input.unit !== undefined ? { unit: input.unit } : {}),
           ...(input.description !== undefined ? { description: input.description } : {}),
+          ...(input.reorderPoint !== undefined ? { reorderPoint: input.reorderPoint } : {}),
         },
       });
       if (updated.count !== 1) throw new NotFoundException('Product not found.');
