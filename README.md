@@ -219,7 +219,33 @@ two-decimal strings computed with decimal arithmetic, never floats. The tests
 cover the full lifecycle, the state machine, role separation, isolation, and
 committed-data concurrency for receipts and numbering.
 
+## Stock API
 
+Stock routes live under `/organizations/:organizationId/stock`. Any member reads
+levels and movement history; warehouse members (or admins) record transfers and
+adjustments. Receipts already post to the ledger automatically, so these routes
+cover the remaining hand-entered movements.
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | `/levels` | On-hand quantity per product and location; filter by location, search by product name or SKU, paginated. |
+| GET | `/movements` | Full movement history, newest first, with a human-readable detail per entry; filter by product or location. |
+| POST | `/transfers` | Move a positive quantity between two different locations; optional note. |
+| POST | `/adjustments` | Positive or negative correction with a required reason; zero is rejected. |
+
+A transfer writes one `TRANSFER_OUT` and one `TRANSFER_IN` movement plus the
+transfer record in a single transaction; an adjustment writes one `ADJUSTMENT`
+movement. Both lock the affected stock level rows (ordered, `FOR UPDATE`) before
+checking availability, so competing requests for the same units resolve to one
+success and one conflict, and no location can go negative — the database check
+constraints enforce the same rules again underneath. Transfers to archived
+locations are rejected, while adjustments at archived locations remain possible
+for closing corrections. Movement details render as the adjustment reason or
+`Source to Destination - note` for transfers; deliveries show their purchase
+order number. The tests cover the report shapes, filters, every boundary
+(insufficient stock, same location, zero or unreasoned adjustments, archived
+destinations, cross-tenant references), role separation, and committed-data
+concurrency for simultaneous transfers of the same stock.
 
 ## Authentication API
 
@@ -514,8 +540,10 @@ locations complete milestone 3 with the same schema, API, and interface pattern.
 Milestone 4 adds the purchase order workflow end to end: draft, approval,
 rejection, cancellation, and partial receipts that post to the stock ledger and
 per-location stock levels, all covered by constraint, workflow, concurrency, and
-browser tests. Next are stock transfers, adjustments, and reports. Invitations
-and production mail hardening are still pending.
+browser tests. Milestone 5 adds the stock API: transfers between locations and
+reasoned adjustments with row-level locking and no-negative guarantees, plus
+level and movement reports. The stock workspace screens are next, then
+invitations and production mail hardening.
 
 ## Commit Workflow
 
