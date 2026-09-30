@@ -10,6 +10,6 @@ import { AccountMailer } from './account-mailer.service';
   imports: [PrismaModule],
   controllers: [AuthController],
   providers: [AuthService, PasswordService, AccountService, AccountMailer],
-  exports: [AuthService],
+  exports: [AuthService, AccountMailer],
 })
 export class AuthModule {}

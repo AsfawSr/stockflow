@@ -247,6 +247,31 @@ order number. The tests cover the report shapes, filters, every boundary
 destinations, cross-tenant references), role separation, and committed-data
 concurrency for simultaneous transfers of the same stock.
 
+## Invitation API
+
+Admins manage invitations under `/organizations/:organizationId/invitations`;
+accepting is a separate authenticated route because the invitee is not a member
+yet.
+
+| Method | Path | Behavior |
+| --- | --- | --- |
+| GET | `/organizations/:id/invitations` | Pending (unexpired) invitations with roles and inviter. |
+| POST | `/organizations/:id/invitations` | Invites an email with a role set and emails a single-use link; re-inviting replaces the pending link. |
+| DELETE | `/organizations/:id/invitations/:invitationId` | Revokes a pending invitation; its link stops working. |
+| POST | `/invitations/accept` | Consumes `{ token }` for the signed-in, verified user and creates the membership. |
+
+Invitations store only SHA-256 token digests, expire after seven days, and are
+bound to a lowercase email address; the database enforces the same normalized
+email, hash format, future expiry, and valid role set rules as memberships.
+Inviting a current member returns 409. Accepting requires the signed-in user's
+verified email to match the invitation exactly; otherwise it is 403. A failed
+invitation email removes the invitation and returns 503, so no unreachable link
+stays pending. Consumption deletes the row inside a transaction with a claimed
+count check, so concurrent accepts resolve to one membership; the membership
+unique constraint is the final guard. The tests cover the invite-accept
+lifecycle, replacement, expiry, mismatch, revocation, admin-only management,
+tenant isolation, and committed-data concurrent accepts.
+
 ## Authentication API
 
 All endpoints are under `/api`. Routes require a bearer session by default;

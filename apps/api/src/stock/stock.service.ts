@@ -82,7 +82,8 @@ export class StockService {
           },
           adjustment: { select: { reason: true } },
         },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        // Type breaks the tie for a transfer pair created in the same instant.
+        orderBy: [{ createdAt: 'desc' }, { type: 'asc' }, { id: 'desc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
