@@ -272,6 +272,91 @@ export const rejectInputSchema = z.object({
   note: z.string().trim().min(1, 'Explain why the order is rejected.').max(1000),
 });
 
+export const stockMovementTypeSchema = z.enum([
+  'RECEIPT',
+  'TRANSFER_IN',
+  'TRANSFER_OUT',
+  'ADJUSTMENT',
+]);
+export type StockMovementType = z.infer<typeof stockMovementTypeSchema>;
+export const movementTypeLabels: Record<StockMovementType, string> = {
+  RECEIPT: 'Delivery',
+  TRANSFER_IN: 'Transfer in',
+  TRANSFER_OUT: 'Transfer out',
+  ADJUSTMENT: 'Adjustment',
+};
+export const movementTypeTone: Record<StockMovementType, 'online' | 'offline' | 'pending'> = {
+  RECEIPT: 'online',
+  TRANSFER_IN: 'online',
+  TRANSFER_OUT: 'offline',
+  ADJUSTMENT: 'pending',
+};
+export const stockLevelListSchema = z.object({
+  items: z.array(
+    z.object({
+      product: orderProductSchema,
+      location: orderPartySchema,
+      quantity: z.number().int().nonnegative(),
+      updatedAt: z.iso.datetime(),
+    }),
+  ),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export const stockMovementListSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.uuid(),
+      type: stockMovementTypeSchema,
+      quantity: z.number().int(),
+      product: orderProductSchema,
+      location: orderPartySchema,
+      createdBy: orderUserSchema,
+      createdAt: z.iso.datetime(),
+      detail: z.string().nullable(),
+    }),
+  ),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export const stockWriteResultSchema = z.object({
+  id: z.uuid(),
+  levels: z.array(z.object({ locationId: z.uuid(), quantity: z.number().int() })),
+});
+export const transferInputSchema = z
+  .object({
+    productId: z.uuid('Choose a product.'),
+    fromLocationId: z.uuid('Choose a source location.'),
+    toLocationId: z.uuid('Choose a destination location.'),
+    quantity: z.coerce
+      .number()
+      .int('Enter a whole number.')
+      .min(1, 'Enter a quantity of at least 1.')
+      .max(1000000, 'Use at most 1,000,000.'),
+    note: optionalTrimmed(500),
+  })
+  .refine((input) => input.fromLocationId !== input.toLocationId, {
+    path: ['toLocationId'],
+    message: 'Choose two different locations.',
+  });
+export const adjustmentInputSchema = z.object({
+  productId: z.uuid('Choose a product.'),
+  locationId: z.uuid('Choose a location.'),
+  quantity: z.coerce
+    .number()
+    .int('Enter a whole number.')
+    .min(-1000000, 'Use at least -1,000,000.')
+    .max(1000000, 'Use at most 1,000,000.')
+    .refine((value) => value !== 0, 'Enter a quantity other than zero.'),
+  reason: z
+    .string()
+    .trim()
+    .min(1, 'Explain the adjustment.')
+    .max(500, 'Use at most 500 characters.'),
+});
+
 export type PurchaseOrder = z.infer<typeof purchaseOrderSchema>;
 export type PurchaseOrderStatus = z.infer<typeof purchaseOrderStatusSchema>;
 

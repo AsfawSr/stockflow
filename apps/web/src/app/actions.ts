@@ -21,6 +21,9 @@ import {
   orderLineInputSchema,
   purchaseOrderSchema,
   rejectInputSchema,
+  adjustmentInputSchema,
+  stockWriteResultSchema,
+  transferInputSchema,
   sessionSchema,
   signupSchema,
   supplierInputSchema,
@@ -546,4 +549,67 @@ export async function receiveOrderAction(_previous: FormState, form: FormData): 
     };
   for (const path of orderPaths(organizationId.data, orderId.data)) revalidatePath(path);
   return { success: 'Delivery recorded.' };
+}
+
+export async function createTransferAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  if (!organizationId.success) return { error: 'Choose a valid organization.' };
+  const values = {
+    productId: String(form.get('productId') ?? ''),
+    fromLocationId: String(form.get('fromLocationId') ?? ''),
+    toLocationId: String(form.get('toLocationId') ?? ''),
+    quantity: String(form.get('quantity') ?? ''),
+    note: String(form.get('note') ?? ''),
+  };
+  const parsed = transferInputSchema.safeParse(values);
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors, values };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/stock/transfers`,
+    stockWriteResultSchema,
+    { method: 'POST', body: parsed.data },
+  );
+  if (!result.ok)
+    return {
+      error:
+        result.status === 409
+          ? 'Not enough stock at the source, or the destination is unavailable. Refresh and try again.'
+          : result.error,
+      values,
+    };
+  revalidatePath(`/workspace/${organizationId.data}/stock`);
+  return { success: 'Transfer recorded.' };
+}
+
+export async function createAdjustmentAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  if (!organizationId.success) return { error: 'Choose a valid organization.' };
+  const values = {
+    productId: String(form.get('productId') ?? ''),
+    locationId: String(form.get('locationId') ?? ''),
+    quantity: String(form.get('quantity') ?? ''),
+    reason: String(form.get('reason') ?? ''),
+  };
+  const parsed = adjustmentInputSchema.safeParse(values);
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors, values };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/stock/adjustments`,
+    stockWriteResultSchema,
+    { method: 'POST', body: parsed.data },
+  );
+  if (!result.ok)
+    return {
+      error:
+        result.status === 409
+          ? 'The adjustment would take stock below zero. Refresh and try again.'
+          : result.error,
+      values,
+    };
+  revalidatePath(`/workspace/${organizationId.data}/stock`);
+  return { success: 'Adjustment recorded.' };
 }

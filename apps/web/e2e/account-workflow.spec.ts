@@ -55,6 +55,12 @@ test.afterAll(async () => {
     await database.query('DELETE FROM stock_movements WHERE organization_id = ANY($1::uuid[])', [
       ownedIds,
     ]);
+    await database.query('DELETE FROM stock_transfers WHERE organization_id = ANY($1::uuid[])', [
+      ownedIds,
+    ]);
+    await database.query('DELETE FROM stock_adjustments WHERE organization_id = ANY($1::uuid[])', [
+      ownedIds,
+    ]);
     await database.query('DELETE FROM stock_levels WHERE organization_id = ANY($1::uuid[])', [
       ownedIds,
     ]);
@@ -365,6 +371,77 @@ test('account access, cookie privacy, organization selection, and revoked permis
   );
   expect(stock.rows).toEqual([{ quantity: 10 }]);
 
+  await page.getByRole('link', { name: 'Locations', exact: true }).click();
+  await page.getByRole('button', { name: 'New location', exact: true }).click();
+  const storeDialog = page.getByRole('dialog', { name: 'New location', exact: true });
+  await storeDialog.getByLabel('Location name', { exact: true }).fill('Retail Store');
+  await storeDialog.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(storeDialog).not.toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Retail Store', exact: true })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Stock', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Stock', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: '10 piece', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Delivery for PO-0001', exact: true })).toHaveCount(
+    2,
+  );
+
+  await page.getByRole('button', { name: 'Transfer stock', exact: true }).click();
+  const transferDialog = page.getByRole('dialog', { name: 'Transfer stock', exact: true });
+  await transferDialog
+    .getByLabel('Product', { exact: true })
+    .selectOption({ label: 'USB-C Charger 65W (USB-C_65W.01)' });
+  await transferDialog
+    .getByLabel('From location', { exact: true })
+    .selectOption({ label: 'Main Warehouse' });
+  await transferDialog
+    .getByLabel('To location', { exact: true })
+    .selectOption({ label: 'Retail Store' });
+  await transferDialog.getByLabel('Quantity', { exact: true }).fill('100');
+  await transferDialog.getByRole('button', { name: 'Record transfer', exact: true }).click();
+  await expect(transferDialog.getByRole('alert')).toContainText('Not enough stock at the source');
+  await transferDialog.getByLabel('Quantity', { exact: true }).fill('4');
+  await transferDialog.getByLabel('Note (optional)', { exact: true }).fill('Restock shelf');
+  await transferDialog.getByRole('button', { name: 'Record transfer', exact: true }).click();
+  await expect(transferDialog).not.toBeVisible();
+  await expect(page.getByRole('cell', { name: '6 piece', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: '4 piece', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'Main Warehouse to Retail Store - Restock shelf', exact: true }),
+  ).toHaveCount(2);
+
+  await page.getByRole('button', { name: 'Adjust stock', exact: true }).click();
+  const adjustDialog = page.getByRole('dialog', { name: 'Adjust stock', exact: true });
+  await adjustDialog
+    .getByLabel('Product', { exact: true })
+    .selectOption({ label: 'USB-C Charger 65W (USB-C_65W.01)' });
+  await adjustDialog
+    .getByLabel('Location', { exact: true })
+    .selectOption({ label: 'Main Warehouse' });
+  await adjustDialog.getByLabel('Quantity change', { exact: true }).fill('-1');
+  await adjustDialog.getByRole('button', { name: 'Record adjustment', exact: true }).click();
+  await expect(adjustDialog.getByText('Explain the adjustment.', { exact: true })).toBeVisible();
+  await adjustDialog.getByLabel('Reason', { exact: true }).fill('Damaged unit');
+  await adjustDialog.getByRole('button', { name: 'Record adjustment', exact: true }).click();
+  await expect(adjustDialog).not.toBeVisible();
+  await expect(page.getByRole('cell', { name: '5 piece', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Damaged unit', exact: true })).toBeVisible();
+  await checkLayouts(page);
+  await page.screenshot({ path: testInfo.outputPath('stock-desktop.png'), fullPage: true });
+
+  await page
+    .locator('.catalog-toolbar')
+    .getByLabel('Location', { exact: true })
+    .selectOption({ label: 'Retail Store' });
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page.getByRole('cell', { name: '5 piece', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('cell', { name: '4 piece', exact: true })).toBeVisible();
+  const balances = await database.query<{ quantity: number }>(
+    'SELECT quantity FROM stock_levels WHERE organization_id = $1 ORDER BY quantity',
+    [firstId],
+  );
+  expect(balances.rows).toEqual([{ quantity: 4 }, { quantity: 5 }]);
+
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
 
@@ -409,6 +486,11 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await expect(page.getByRole('button', { name: 'Edit Main Warehouse', exact: true })).toHaveCount(
     0,
   );
+  // A purchaser reads stock but cannot move it.
+  await page.getByRole('link', { name: 'Stock', exact: true }).click();
+  await expect(page.getByRole('cell', { name: '5 piece', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Transfer stock', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Adjust stock', exact: true })).toHaveCount(0);
   await database.query('DELETE FROM memberships WHERE organization_id = $1 AND user_id = $2', [
     secondId,
     userId,

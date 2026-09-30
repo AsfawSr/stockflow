@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import {
   Activity,
+  Boxes,
   Building2,
   ClipboardList,
   LayoutDashboard,
@@ -29,6 +30,7 @@ export function AppShell({
     | 'Suppliers'
     | 'Locations'
     | 'Purchase orders'
+    | 'Stock'
     | 'System status';
   children: React.ReactNode;
 }) {
@@ -108,6 +110,16 @@ export function AppShell({
             >
               <ClipboardList size={18} aria-hidden="true" />
               Purchase orders
+            </Link>
+          )}
+          {organization && (
+            <Link
+              className="nav-item"
+              href={`/workspace/${organization.id}/stock`}
+              aria-current={section === 'Stock' ? 'page' : undefined}
+            >
+              <Boxes size={18} aria-hidden="true" />
+              Stock
             </Link>
           )}
           <Link

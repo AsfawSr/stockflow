@@ -353,7 +353,12 @@ launch, add a durable mail queue, retry/monitoring, and appropriate abuse contro
   archive, and restore products through dialogs; other members see a read-only list.
   Search, filter, and paging run server-side through GET parameters, so catalog URLs
   are shareable. Product mutations are server actions that revalidate the list, map
-  duplicate SKUs to a clear message, and never expose other organizations' data.- `/status` remains public and displays web, API, and PostgreSQL health.
+  duplicate SKUs to a clear message, and never expose other organizations' data.- `/workspace/:organizationId/stock` shows on-hand balances per product and location
+  with a location filter, product search, and pagination, plus the latest movement
+  history with type badges and human-readable details. Admins and warehouse members
+  record transfers and adjustments through dialogs whose fields are controlled state,
+  so a rejected submission (such as insufficient stock) keeps the entered values;
+  other members see a read-only report.- `/status` remains public and displays web, API, and PostgreSQL health.
 - `/verify-email` gates unverified accounts; `/verify-email/confirm` consumes email links.
 - `/forgot-password` requests recovery; `/reset-password` accepts a new password from a valid link.
 
@@ -506,6 +511,11 @@ details, rejects a duplicate supplier name, creates a location, and verifies tha
 purchaser manages suppliers but not products or locations. It then runs a purchase
 order from draft through line editing, submission, approval, and two partial
 deliveries to `RECEIVED`, checking the stock level in PostgreSQL afterwards.
+On the stock screen it verifies the delivered balance, rejects an oversized
+transfer while keeping the entered values, records a transfer with a note and a
+negative adjustment with a reason, filters by location, confirms the resulting
+balances in PostgreSQL, and checks that a purchaser can read stock but sees no
+transfer or adjustment controls.
 It checks desktop, tablet,
 and mobile widths, including long organization names, and saves ignored screenshots
 under `apps/web/test-results`. Browser fixture records are committed during the
@@ -540,10 +550,11 @@ locations complete milestone 3 with the same schema, API, and interface pattern.
 Milestone 4 adds the purchase order workflow end to end: draft, approval,
 rejection, cancellation, and partial receipts that post to the stock ledger and
 per-location stock levels, all covered by constraint, workflow, concurrency, and
-browser tests. Milestone 5 adds the stock API: transfers between locations and
-reasoned adjustments with row-level locking and no-negative guarantees, plus
-level and movement reports. The stock workspace screens are next, then
-invitations and production mail hardening.
+browser tests. Milestone 5 completes the ledger: stock transfers between locations
+and reasoned adjustments with row-level locking and no-negative guarantees, plus a
+stock overview screen with balances, filters, movement history, and role-guarded
+transfer and adjustment dialogs. Invitations and production mail hardening are
+still pending.
 
 ## Commit Workflow
 
