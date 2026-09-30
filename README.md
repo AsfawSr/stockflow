@@ -61,8 +61,8 @@ PostgreSQL rejects duplicate memberships, missing parent records, blank names,
 null or duplicate roles, and deletion of users or organizations with memberships.
 Emails must be non-empty, lowercase, whitespace-free, and unique. This is a storage
 normalization rule, not full email validation or proof of email ownership.
-Currency codes must be three uppercase letters; validation against the supported
-currency list will belong to the application layer.
+Currency codes must be three uppercase letters; the organization API also validates
+them against ISO 4217 through `class-validator`.
 
 Custom checks live in the SQL migration because Prisma does not express them in
 the model schema. Preserve these checks in future migrations. Adding a role also
@@ -70,8 +70,8 @@ requires updating the `memberships_roles_valid_set` check, which uses the enum's
 four current values. Use migrations, not `prisma db push`, to reproduce the schema.
 UUID defaults and `updatedAt` updates are handled by Prisma Client.
 
-These relationships do not enforce request-level tenant isolation or permissions.
-Organization selection and membership guards are the next authorization step.
+These relationships alone do not enforce request-level permissions. Organization
+API routes additionally use current membership guards and scoped database queries.
 
 ## Authentication API
 
@@ -111,6 +111,41 @@ localStorage. Use HTTPS outside local development. Email verification, password
 reset/change, scheduled expired-session cleanup, and distributed rate limiting are
 still required before public production use. Registration does not verify email
 ownership, and its conflict response can reveal account existence.
+
+## Organization Access
+
+Every organization route requires a valid bearer session. The identity comes from
+the server-side session, never a submitted user id. A user selects an organization
+using its URL id; arbitrary headers cannot change the authorization scope.
+
+| Method | Path | Required access |
+| --- | --- | --- |
+| GET | `/organizations` | Lists only the caller's organizations and roles. |
+| POST | `/organizations` | Any authenticated user; creates their `ADMIN` membership atomically. |
+| GET | `/organizations/:organizationId` | Current membership in that organization. |
+| PATCH | `/organizations/:organizationId` | Current `ADMIN` role; renames the organization only. |
+| GET | `/organizations/:organizationId/members` | Current `ADMIN` role; returns safe member profiles and roles. |
+
+Create accepts only `name` and `currency`; rename accepts only `name`. Clients cannot
+assign themselves roles, provide an owner id, or change currency through rename.
+Unknown body properties are rejected rather than silently used. The current
+collection endpoints return complete lists; pagination is needed before large-scale use.
+
+Membership and roles are read from PostgreSQL for each organization request and are
+not stored in access tokens. An admin role in one organization grants no access to
+another. Revoking membership or changing roles takes effect on subsequent requests
+without requiring logout. Missing membership returns 404; insufficient permissions
+for an existing member returns 403. Missing, expired, or revoked authentication
+returns 401. Organization reads and writes also include membership conditions in
+their database queries, including the admin requirement on updates and member lists.
+
+The creator is the initial admin. Invitations, adding/removing members, role-change
+APIs, and last-admin protection are not exposed yet; tests change membership records
+directly to verify authorization behavior. There is no global administrator role.
+Future inventory and purchasing endpoints must apply these guards and scope every
+query by the authenticated membership; the current guards do not automatically
+secure arbitrary future queries, exports, or background jobs. PostgreSQL row-level
+security is not configured in this milestone.
 
 ## Local Development
 
@@ -179,6 +214,8 @@ npm run test:db
 The `.db-spec.ts` tests are excluded from `npm test`. They verify Prisma mappings,
 memberships across organizations, uniqueness, foreign keys, role sets, normalization,
 restricted deletes, real Argon2 verification, expiry, and logout revocation over HTTP.
+They also verify cross-tenant denial, admin-only actions, request-field spoofing,
+and live permission changes using the same session token.
 All fixture writes run inside transactions that roll back,
 including the Prisma success path. The tests neither reset nor truncate tables.
 
@@ -201,8 +238,9 @@ and the connection behavior has automated tests. PostgreSQL connectivity through
 Prisma and the API readiness endpoint are implemented. Organization, user, and
 membership models now have a committed migration and database constraint tests.
 Backend registration, login, and revocable sessions are implemented. No inventory
-data is mocked or stored yet. Organization authorization and the frontend login
-workflow are the next steps before exposing organization-owned business data.
+data is mocked or stored yet. Organization creation, scoped access, and admin guards
+are implemented and tested. The next user-facing step is the frontend login and
+organization-selection workflow, followed by invitations and inventory features.
 
 ## Commit Workflow
 

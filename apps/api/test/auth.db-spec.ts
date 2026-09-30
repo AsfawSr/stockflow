@@ -165,6 +165,175 @@ describe('Authentication and authorization against PostgreSQL', () => {
     });
   });
 
+  it('creates an admin membership atomically and isolates organizations from other accounts', async () => {
+    await withApplication(async (app, database) => {
+      const owner = await register(app);
+      const outsider = await register(app);
+      const ownerAuth = `Bearer ${owner.token}`;
+      const outsiderAuth = `Bearer ${outsider.token}`;
+      await request(app.getHttpServer()).get('/api/organizations').expect(401);
+      await request(app.getHttpServer())
+        .get('/api/organizations')
+        .set('Authorization', ownerAuth)
+        .expect(200)
+        .expect([]);
+
+      await request(app.getHttpServer())
+        .post('/api/organizations')
+        .set('Authorization', ownerAuth)
+        .send({ name: 'Forged Owner', currency: 'USD', userId: outsider.user.id, roles: ['ADMIN'] })
+        .expect(400);
+      await request(app.getHttpServer())
+        .post('/api/organizations')
+        .set('Authorization', ownerAuth)
+        .send({ name: 'Invalid Currency', currency: 'ZZZ' })
+        .expect(400);
+      const created = await request(app.getHttpServer())
+        .post('/api/organizations')
+        .set('Authorization', ownerAuth)
+        .send({ name: ' First Organization ', currency: 'usd' })
+        .expect(201);
+      const organizationId = created.body.id as string;
+      expect(created.body.name).toBe('First Organization');
+      expect(created.body.currency).toBe('USD');
+      const membership = await database.membership.findUniqueOrThrow({
+        where: { organizationId_userId: { organizationId, userId: owner.user.id } },
+      });
+      expect(membership.roles).toEqual(['ADMIN']);
+      const listed = await request(app.getHttpServer())
+        .get('/api/organizations')
+        .set('Authorization', ownerAuth)
+        .expect(200);
+      expect(listed.body.map((organization: { id: string }) => organization.id)).toEqual([
+        organizationId,
+      ]);
+      await request(app.getHttpServer())
+        .get(`/api/organizations?userId=${owner.user.id}`)
+        .set('Authorization', outsiderAuth)
+        .expect(200)
+        .expect([]);
+      await request(app.getHttpServer())
+        .get(`/api/organizations/${organizationId}`)
+        .set('Authorization', ownerAuth)
+        .expect(200);
+      await request(app.getHttpServer())
+        .get(`/api/organizations/${organizationId}`)
+        .set('Authorization', outsiderAuth)
+        .expect(404);
+      await request(app.getHttpServer())
+        .get(`/api/organizations/${organizationId}/members`)
+        .set('Authorization', outsiderAuth)
+        .expect(404);
+      await request(app.getHttpServer())
+        .patch(`/api/organizations/${organizationId}`)
+        .set('Authorization', outsiderAuth)
+        .send({ name: 'Unauthorized Rename' })
+        .expect(404);
+      expect(
+        (await database.organization.findUniqueOrThrow({ where: { id: organizationId } })).name,
+      ).toBe('First Organization');
+      await request(app.getHttpServer())
+        .get('/api/organizations/not-a-uuid')
+        .set('Authorization', ownerAuth)
+        .expect(400);
+      await request(app.getHttpServer())
+        .get(`/api/organizations/${randomUUID()}`)
+        .set('Authorization', ownerAuth)
+        .expect(404);
+      await request(app.getHttpServer())
+        .patch(`/api/organizations/${organizationId}`)
+        .set('Authorization', ownerAuth)
+        .send({ name: 'Owner Rename', currency: 'ETB' })
+        .expect(400);
+      await request(app.getHttpServer())
+        .patch(`/api/organizations/${organizationId}`)
+        .set('Authorization', ownerAuth)
+        .send({ name: 'Owner Rename' })
+        .expect(200);
+    });
+  });
+
+  it('uses current organization-specific roles and honors role changes and revoked memberships', async () => {
+    await withApplication(async (app, database) => {
+      const owner = await register(app);
+      const member = await register(app);
+      const created = await request(app.getHttpServer())
+        .post('/api/organizations')
+        .set('Authorization', `Bearer ${owner.token}`)
+        .send({ name: 'Restricted Organization', currency: 'USD' })
+        .expect(201);
+      const organizationId = created.body.id as string;
+      const other = await request(app.getHttpServer())
+        .post('/api/organizations')
+        .set('Authorization', `Bearer ${member.token}`)
+        .send({ name: 'Member Own Organization', currency: 'ETB' })
+        .expect(201);
+      const membership = await database.membership.create({
+        data: { organizationId, userId: member.user.id, roles: ['WAREHOUSE'] },
+      });
+      const memberAuth = `Bearer ${member.token}`;
+      await request(app.getHttpServer())
+        .get(`/api/organizations/${organizationId}`)
+        .set('Authorization', memberAuth)
+        .expect(200);
+      await request(app.getHttpServer())
+        .patch(`/api/organizations/${organizationId}`)
+        .set('Authorization', memberAuth)
+        .set('X-Organization-Id', other.body.id)
+        .send({ name: 'Cross-organization Admin' })
+        .expect(403);
+      await request(app.getHttpServer())
+        .get(`/api/organizations/${organizationId}/members`)
+        .set('Authorization', memberAuth)
+        .expect(403);
+      const members = await request(app.getHttpServer())
+        .get(`/api/organizations/${organizationId}/members`)
+        .set('Authorization', `Bearer ${owner.token}`)
+        .expect(200);
+      expect(members.body).toHaveLength(2);
+      expect(
+        members.body.every(
+          (entry: { user: object }) =>
+            Object.keys(entry.user).sort().join(',') === 'displayName,email,id',
+        ),
+      ).toBe(true);
+      await database.membership.update({
+        where: { id: membership.id },
+        data: { roles: ['ADMIN'] },
+      });
+      await request(app.getHttpServer())
+        .patch(`/api/organizations/${organizationId}`)
+        .set('Authorization', memberAuth)
+        .send({ name: 'Promoted Member Rename' })
+        .expect(200);
+      await database.membership.update({
+        where: { id: membership.id },
+        data: { roles: ['WAREHOUSE'] },
+      });
+      await request(app.getHttpServer())
+        .patch(`/api/organizations/${organizationId}`)
+        .set('Authorization', memberAuth)
+        .send({ name: 'Demoted Member Rename' })
+        .expect(403);
+      await database.membership.delete({ where: { id: membership.id } });
+      await request(app.getHttpServer())
+        .get(`/api/organizations/${organizationId}`)
+        .set('Authorization', memberAuth)
+        .expect(404);
+      await request(app.getHttpServer())
+        .get('/api/auth/me')
+        .set('Authorization', memberAuth)
+        .expect(200);
+      const remaining = await request(app.getHttpServer())
+        .get('/api/organizations')
+        .set('Authorization', memberAuth)
+        .expect(200);
+      expect(remaining.body.map((organization: { id: string }) => organization.id)).toEqual([
+        other.body.id,
+      ]);
+    });
+  });
+
   it('does not claim an existing identity without credentials through registration', async () => {
     await withApplication(async (app, database) => {
       const user = await database.user.create({

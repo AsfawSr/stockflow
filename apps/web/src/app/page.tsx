@@ -243,8 +243,8 @@ export default async function Home() {
           <section className="configuration" aria-label="Workspace configuration">
             <div>
               <ShieldCheck size={18} aria-hidden="true" />
-              <span>Authentication</span>
-              <strong>Not configured</strong>
+              <span>Sign-in interface</span>
+              <strong>Pending</strong>
             </div>
           </section>
           <footer className="page-footer">

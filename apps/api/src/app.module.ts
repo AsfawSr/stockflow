@@ -7,12 +7,14 @@ import { AuthModule } from './auth/auth.module';
 import { HealthController } from './health/health.controller';
 import { ReadinessController } from './health/readiness.controller';
 import { PrismaModule } from './prisma/prisma.module';
+import { OrganizationsModule } from './organizations/organizations.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     AuthModule,
+    OrganizationsModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 120 }]),
   ],
   controllers: [HealthController, ReadinessController],
