@@ -620,6 +620,30 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await page.getByLabel('Password', { exact: true }).fill(newPassword);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page).toHaveURL(/\/organizations$/);
+
+  // Signed-in password change keeps this session and rejects a wrong current password.
+  await page.getByRole('link', { name: 'Account', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Account security', exact: true })).toBeVisible();
+  const changedPassword = 'a rotated browser-only passphrase';
+  await page.getByLabel('Current password', { exact: true }).fill('not the right passphrase');
+  await page.getByLabel('New password', { exact: true }).fill(changedPassword);
+  await page.getByLabel('Confirm new password', { exact: true }).fill(changedPassword);
+  await page.getByRole('button', { name: 'Update password', exact: true }).click();
+  await expect(page.locator('form').getByRole('alert')).toContainText(
+    'current password is incorrect',
+  );
+  await page.getByLabel('Current password', { exact: true }).fill(newPassword);
+  await page.getByLabel('New password', { exact: true }).fill(changedPassword);
+  await page.getByLabel('Confirm new password', { exact: true }).fill(changedPassword);
+  await page.getByRole('button', { name: 'Update password', exact: true }).click();
+  await expect(page.locator('form').getByRole('status')).toContainText('Password updated');
+  await checkLayouts(page);
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page).toHaveURL(/\/login\?notice=signed-out$/);
+  await page.getByLabel('Email address', { exact: true }).fill(emails[0]);
+  await page.getByLabel('Password', { exact: true }).fill(changedPassword);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page).toHaveURL(/\/organizations$/);
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page).toHaveURL(/\/login\?notice=signed-out$/);
 

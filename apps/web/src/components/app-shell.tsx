@@ -8,6 +8,7 @@ import {
   LogOut,
   Package,
   Truck,
+  UserRound,
   Warehouse,
 } from 'lucide-react';
 import { logoutAction } from '@/app/actions';
@@ -31,6 +32,7 @@ export function AppShell({
     | 'Locations'
     | 'Purchase orders'
     | 'Stock'
+    | 'Account'
     | 'System status';
   children: React.ReactNode;
 }) {
@@ -120,6 +122,16 @@ export function AppShell({
             >
               <Boxes size={18} aria-hidden="true" />
               Stock
+            </Link>
+          )}
+          {user && (
+            <Link
+              className="nav-item"
+              href="/account"
+              aria-current={section === 'Account' ? 'page' : undefined}
+            >
+              <UserRound size={18} aria-hidden="true" />
+              Account
             </Link>
           )}
           <Link

@@ -354,6 +354,10 @@ main {
   align-items: center;
   gap: 8px;
 }
+.account-form {
+  margin-top: 22px;
+  max-width: 420px;
+}
 .service-table-wrapper {
   overflow-x: auto;
 }

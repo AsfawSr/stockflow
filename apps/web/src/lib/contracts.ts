@@ -61,6 +61,16 @@ export const resetPasswordSchema = z
     path: ['confirmPassword'],
     message: 'Passwords must match.',
   });
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Enter your current password.').max(128),
+    newPassword: z.string().min(12, 'Use at least 12 characters.').max(128),
+    confirmPassword: z.string(),
+  })
+  .refine((input) => input.newPassword === input.confirmPassword, {
+    path: ['confirmPassword'],
+    message: 'Passwords must match.',
+  });
 export const organizationIdSchema = z.uuid();
 
 export const loginSchema = z.object({

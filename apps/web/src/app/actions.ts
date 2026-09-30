@@ -8,6 +8,7 @@ import {
   accountTokenSchema,
   messageSchema,
   resetPasswordSchema,
+  changePasswordSchema,
   loginSchema,
   invitationSchema,
   inviteInputSchema,
@@ -688,4 +689,25 @@ export async function acceptInvitationAction(
   await rememberOrganization(result.data.id);
   revalidatePath('/organizations');
   redirect(`/workspace/${result.data.id}`);
+}
+
+export async function changePasswordAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const parsed = changePasswordSchema.safeParse({
+    currentPassword: form.get('currentPassword'),
+    newPassword: form.get('newPassword'),
+    confirmPassword: form.get('confirmPassword'),
+  });
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  const result = await actionRequest('/auth/password/change', messageSchema, {
+    method: 'POST',
+    body: { currentPassword: parsed.data.currentPassword, newPassword: parsed.data.newPassword },
+  });
+  if (!result.ok)
+    return {
+      error: result.status === 400 ? 'Your current password is incorrect.' : result.error,
+    };
+  return { success: 'Password updated. Your other sessions were signed out.' };
 }
