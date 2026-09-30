@@ -317,11 +317,20 @@ requires shared rate-limit storage and a carefully configured trusted proxy.
 
 The Next.js interface uses server actions and HTTP-only session cookies; bearer
 tokens are never returned to client components or stored in localStorage.
-Use HTTPS outside local development. Signed-in password changes, scheduled expired
-record cleanup, shared rate limiting, and production mail monitoring are still
+Use HTTPS outside local development. Signed-in password changes, shared rate
+limiting, and production mail monitoring are still
 required before public deployment. Registration alone does not prove email ownership;
 organization access requires completing an email link. Its conflict response can
 still reveal account existence.
+
+A maintenance sweep runs hourly in the API process (and once at startup) to delete
+expired sessions, expired account tokens, and expired invitations. It never touches
+unexpired or consumed-but-live records, logs what it removed, survives database
+outages by retrying on the next interval, and is disabled under `NODE_ENV=test`
+so test fixtures stay deterministic. `CLEANUP_INTERVAL_MS` overrides the cadence.
+Production email refuses the development file transport: outside development,
+`MAIL_TRANSPORT=smtp` with `SMTP_HOST` and `MAIL_FROM` is required, and the SMTP
+transport uses bounded connection, greeting, and socket timeouts.
 
 ## Verification and Recovery Email
 
@@ -594,8 +603,11 @@ stock overview screen with balances, filters, movement history, and role-guarded
 transfer and adjustment dialogs. Member invitations now work end to end: admins
 invite, list, and revoke by email, and invitees join through single-use emailed
 links bound to their verified address. Products carry optional reorder points
-that flag low balances and power a low-stock report. Production mail hardening
-and scheduled cleanup of expired records are next.
+that flag low balances and power a low-stock report. An hourly maintenance sweep
+removes expired sessions, account tokens, and invitations, and production email
+delivery requires SMTP with bounded timeouts. Remaining hardening before public
+deployment: signed-in password changes, shared rate-limit storage behind a
+trusted proxy, and production mail monitoring.
 
 ## Commit Workflow
 
