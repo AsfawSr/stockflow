@@ -8,6 +8,7 @@ test-results/
 *.tsbuildinfo
 next-env.d.ts
 apps/api/src/generated/prisma/
+apps/api/.local/
 *.log
 .env
 .env.*

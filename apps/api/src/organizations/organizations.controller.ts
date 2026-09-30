@@ -1,10 +1,12 @@
 import { Body, Controller, Get, Header, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import type { AuthenticatedRequest } from '../auth/auth.guard';
+import { VerifiedEmailGuard } from '../auth/auth.guard';
 import { OrganizationAccessGuard, Roles } from './organization-access.guard';
 import { CreateOrganizationDto, RenameOrganizationDto } from './organizations.dto';
 import { OrganizationsService } from './organizations.service';
 
 @Controller('organizations')
+@UseGuards(VerifiedEmailGuard)
 export class OrganizationsController {
   constructor(private readonly organizations: OrganizationsService) {}
 

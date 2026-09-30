@@ -6,6 +6,7 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PasswordService } from '../src/auth/password.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { AccountService } from '../src/auth/account.service';
 
 describe('Authentication HTTP boundary', () => {
   let app: INestApplication;
@@ -13,6 +14,7 @@ describe('Authentication HTTP boundary', () => {
     id: 'fe0675fc-d121-4b8c-bfc9-c7f467b6aa34',
     email: 'user@example.test',
     displayName: 'User',
+    emailVerifiedAt: null,
   };
   const accessToken = 'a'.repeat(43);
   const prisma = {
@@ -27,6 +29,8 @@ describe('Authentication HTTP boundary', () => {
       .useValue(prisma)
       .overrideProvider(PasswordService)
       .useValue(passwords)
+      .overrideProvider(AccountService)
+      .useValue({ sendVerification: jest.fn().mockResolvedValue(true) })
       .compile();
     const application = module.createNestApplication();
     application.setGlobalPrefix('api');
@@ -42,7 +46,8 @@ describe('Authentication HTTP boundary', () => {
     jest.clearAllMocks();
     prisma.session.findUnique.mockResolvedValue({
       id: 'session-id',
-      user,
+      user: { ...user, authVersion: 0 },
+      authVersion: 0,
       expiresAt: new Date(Date.now() + 60000),
     });
   });

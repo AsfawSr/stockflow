@@ -4,12 +4,13 @@ import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto, RegisterDto } from './auth.dto';
 import { PasswordService } from './password.service';
+import { AccountService } from './account.service';
 
-const profileSelect = { id: true, email: true, displayName: true } as const;
+const profileSelect = { id: true, email: true, displayName: true, emailVerifiedAt: true } as const;
 
 export type AuthPrincipal = {
   sessionId: string;
-  user: { id: string; email: string; displayName: string };
+  user: { id: string; email: string; displayName: string; emailVerifiedAt: Date | null };
 };
 
 @Injectable()
@@ -17,6 +18,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly passwords: PasswordService,
+    private readonly accounts: AccountService,
   ) {}
 
   private newSession() {
@@ -41,7 +43,13 @@ export class AuthService {
         },
         select: profileSelect,
       });
-      return { user, accessToken: session.accessToken, expiresAt: session.expiresAt };
+      const verificationEmailSent = await this.accounts.sendVerification(user.id);
+      return {
+        user,
+        accessToken: session.accessToken,
+        expiresAt: session.expiresAt,
+        verificationEmailSent,
+      };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('An account could not be created with these details.');
@@ -53,7 +61,11 @@ export class AuthService {
   async login(input: LoginDto) {
     const account = await this.prisma.user.findUnique({
       where: { email: input.email },
-      select: { ...profileSelect, credential: { select: { passwordHash: true } } },
+      select: {
+        ...profileSelect,
+        authVersion: true,
+        credential: { select: { passwordHash: true } },
+      },
     });
     const valid = await this.passwords.matches(input.password, account?.credential?.passwordHash);
     if (!account?.credential || !valid) {
@@ -61,10 +73,20 @@ export class AuthService {
     }
     const session = this.newSession();
     await this.prisma.session.create({
-      data: { userId: account.id, tokenHash: session.tokenHash, expiresAt: session.expiresAt },
+      data: {
+        userId: account.id,
+        tokenHash: session.tokenHash,
+        expiresAt: session.expiresAt,
+        authVersion: account.authVersion,
+      },
     });
     return {
-      user: { id: account.id, email: account.email, displayName: account.displayName },
+      user: {
+        id: account.id,
+        email: account.email,
+        displayName: account.displayName,
+        emailVerifiedAt: account.emailVerifiedAt,
+      },
       accessToken: session.accessToken,
       expiresAt: session.expiresAt,
     };
@@ -74,12 +96,22 @@ export class AuthService {
     const tokenHash = createHash('sha256').update(accessToken).digest('hex');
     const session = await this.prisma.session.findUnique({
       where: { tokenHash },
-      select: { id: true, expiresAt: true, user: { select: profileSelect } },
+      select: {
+        id: true,
+        expiresAt: true,
+        authVersion: true,
+        user: { select: { ...profileSelect, authVersion: true } },
+      },
     });
-    if (!session || session.expiresAt.getTime() <= Date.now()) {
+    if (
+      !session ||
+      session.expiresAt.getTime() <= Date.now() ||
+      session.authVersion !== session.user.authVersion
+    ) {
       throw new UnauthorizedException('Authentication required.');
     }
-    return { sessionId: session.id, user: session.user };
+    const { authVersion: _version, ...user } = session.user;
+    return { sessionId: session.id, user };
   }
 
   async logout(principal: AuthPrincipal): Promise<void> {

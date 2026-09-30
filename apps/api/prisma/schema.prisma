@@ -18,6 +18,13 @@ enum OrganizationRole {
   @@map("organization_role")
 }
 
+enum AccountTokenPurpose {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+
+  @@map("account_token_purpose")
+}
+
 model Organization {
   id          String       @id @default(uuid()) @db.Uuid
   name        String       @db.VarChar(160)
@@ -38,6 +45,9 @@ model User {
   memberships Membership[]
   credential  PasswordCredential?
   sessions    Session[]
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(3)
+  authVersion Int @default(0) @map("auth_version")
+  accountTokens AccountToken[]
 
   @@map("users")
 }
@@ -54,6 +64,7 @@ model PasswordCredential {
 model Session {
   id        String   @id @default(uuid()) @db.Uuid
   userId    String   @map("user_id") @db.Uuid
+  authVersion Int @default(0) @map("auth_version")
   tokenHash String   @unique @map("token_hash") @db.Char(64)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
@@ -62,6 +73,23 @@ model Session {
   @@index([userId])
   @@index([expiresAt])
   @@map("sessions")
+}
+
+model AccountToken {
+  id String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  email String @db.VarChar(254)
+  purpose AccountTokenPurpose
+  tokenHash String @unique @map("token_hash") @db.Char(64)
+  authVersion Int @map("auth_version")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(3)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@index([expiresAt])
+  @@map("account_tokens")
 }
 
 model Membership {

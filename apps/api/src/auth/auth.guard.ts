@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   SetMetadata,
   UnauthorizedException,
@@ -13,6 +14,21 @@ export const Public = () => SetMetadata('stockflow.public', true);
 
 export interface AuthenticatedRequest extends Request {
   principal: AuthPrincipal;
+}
+
+@Injectable()
+export class VerifiedEmailGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    if (!request.principal?.user.emailVerifiedAt) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: 'EMAIL_NOT_VERIFIED',
+        message: 'Verify your email before accessing organizations.',
+      });
+    }
+    return true;
+  }
 }
 
 @Injectable()
