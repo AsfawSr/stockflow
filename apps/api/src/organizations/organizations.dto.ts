@@ -1,5 +1,25 @@
 import { Transform } from 'class-transformer';
-import { IsISO4217CurrencyCode, IsString, Matches, MaxLength } from 'class-validator';
+import {
+  ArrayNotEmpty,
+  ArrayUnique,
+  IsArray,
+  IsIn,
+  IsISO4217CurrencyCode,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
+import type { OrganizationRole } from '../generated/prisma/client';
+
+const organizationRoles: OrganizationRole[] = ['ADMIN', 'PURCHASER', 'MANAGER', 'WAREHOUSE'];
+
+export class UpdateMemberRolesDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique()
+  @IsIn(organizationRoles, { each: true })
+  roles!: OrganizationRole[];
+}
 
 export class RenameOrganizationDto {
   @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))

@@ -1,8 +1,25 @@
-import { Body, Controller, Get, Header, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Header,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import type { AuthenticatedRequest } from '../auth/auth.guard';
 import { VerifiedEmailGuard } from '../auth/auth.guard';
 import { OrganizationAccessGuard, Roles } from './organization-access.guard';
-import { CreateOrganizationDto, RenameOrganizationDto } from './organizations.dto';
+import {
+  CreateOrganizationDto,
+  RenameOrganizationDto,
+  UpdateMemberRolesDto,
+} from './organizations.dto';
 import { OrganizationsService } from './organizations.service';
 
 @Controller('organizations')
@@ -47,5 +64,29 @@ export class OrganizationsController {
   @Header('Cache-Control', 'no-store')
   members(@Req() request: AuthenticatedRequest, @Param('organizationId') organizationId: string) {
     return this.organizations.members(request.principal.user.id, organizationId);
+  }
+
+  @Patch(':organizationId/members/:memberUserId')
+  @UseGuards(OrganizationAccessGuard)
+  @Roles('ADMIN')
+  @Header('Cache-Control', 'no-store')
+  updateMemberRoles(
+    @Param('organizationId') organizationId: string,
+    @Param('memberUserId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) memberUserId: string,
+    @Body() input: UpdateMemberRolesDto,
+  ) {
+    return this.organizations.updateMemberRoles(organizationId, memberUserId, input);
+  }
+
+  @Delete(':organizationId/members/:memberUserId')
+  @UseGuards(OrganizationAccessGuard)
+  @Roles('ADMIN')
+  @HttpCode(204)
+  @Header('Cache-Control', 'no-store')
+  removeMember(
+    @Param('organizationId') organizationId: string,
+    @Param('memberUserId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) memberUserId: string,
+  ) {
+    return this.organizations.removeMember(organizationId, memberUserId);
   }
 }
