@@ -100,11 +100,41 @@ Deleting an organization with products is restricted rather than cascading.
 The `(organizationId, id)` unique key supports tenant-scoped lookups and future
 composite foreign keys. An index on `(organizationId, archivedAt)` supports filtering
 an organization's active or archived catalog. These keys do not replace membership
-authorization: product API endpoints and frontend forms are not implemented yet.
+authorization: product API endpoints combine both, and every product query is
+filtered by the organization in the URL after the membership guard passes.
 
 The product database tests are included in `npm run test:db`. They exercise Prisma
 create/archive/restore behavior, scoped identifiers, SKU uniqueness and format,
 field limits, and referential integrity. All product test writes are rolled back.
+
+## Product API
+
+All product routes live under `/organizations/:organizationId/products`, require a
+verified email and current membership in that organization, and return
+`Cache-Control: no-store`. Any member may read the catalog; `ADMIN` or `MANAGER`
+roles are required to change it. Nonmembers receive 404 for the whole subtree.
+
+| Method | Path | Required access |
+| --- | --- | --- |
+| GET | `/` | Member; lists products with `search`, `status`, `page`, and `pageSize`. |
+| GET | `/:productId` | Member; returns one product in this organization. |
+| POST | `/` | `ADMIN`/`MANAGER`; creates a product from `sku`, `name`, `unit`, `description?`. |
+| PATCH | `/:productId` | `ADMIN`/`MANAGER`; updates any of those fields, at least one required. |
+| POST | `/:productId/archive` | `ADMIN`/`MANAGER`; archives an active product. |
+| POST | `/:productId/restore` | `ADMIN`/`MANAGER`; restores an archived product. |
+
+Listing defaults to active products, page 1, and 20 items per page (100 maximum);
+`status` accepts `active`, `archived`, or `all`, and `search` matches names
+case-insensitively and SKUs by canonical substring. Responses return
+`{ items, total, page, pageSize }` ordered by name. SKUs are trimmed and uppercased
+before validation, names and units are trimmed, and blank descriptions become null.
+A duplicate SKU in the same organization returns 409 with a fixed message, as does
+archiving an already-archived product (or restoring an active one). Unknown ids,
+malformed UUIDs, and other organizations' product ids return 404. Client-supplied
+`organizationId` or `archivedAt` body fields are rejected rather than trusted.
+The API tests cover role denial, cross-tenant 404s, duplicate SKU conflicts across
+create and update, filtering, and pagination against real PostgreSQL.
+
 
 ## Authentication API
 
@@ -381,9 +411,10 @@ data is mocked or stored yet. Organization creation, scoped access, and admin gu
 are implemented and tested. Frontend signup, login, logout, organization selection,
 and the initial workspace are connected to the real API. Email verification and
 password reset are implemented with local-file and configurable SMTP delivery.
-The Product schema and migration are implemented and tested. Next are the product
-API and catalog interface, then suppliers and locations. Invitations, stock workflows,
-and production mail hardening are still pending.
+The Product schema and migration are implemented and tested, and the product API
+now provides listed, searchable, role-protected create/edit/archive/restore
+endpoints. Next is the frontend catalog interface, then suppliers and locations.
+Invitations, stock workflows, and production mail hardening are still pending.
 
 ## Commit Workflow
 
