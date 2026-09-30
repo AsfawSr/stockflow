@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { PrismaPg } from '@prisma/adapter-pg';
+import { ConfigService } from '@nestjs/config';
 import { verify } from 'argon2';
 import { config } from 'dotenv';
 import { createHash, randomUUID } from 'node:crypto';
@@ -18,14 +18,7 @@ describe('Authentication and authorization against PostgreSQL', () => {
     config({ quiet: true });
     if (!process.env.DATABASE_URL)
       throw new Error('DATABASE_URL is required for integration tests.');
-    prisma = new PrismaClient({
-      adapter: new PrismaPg({
-        connectionString: process.env.DATABASE_URL,
-        connectionTimeoutMillis: 5000,
-        statement_timeout: 5000,
-        max: 2,
-      }),
-    });
+    prisma = new PrismaService(new ConfigService({ DATABASE_URL: process.env.DATABASE_URL }));
   });
 
   afterAll(async () => {
@@ -43,7 +36,13 @@ describe('Authentication and authorization against PostgreSQL', () => {
           async (database) => {
             const module = await Test.createTestingModule({ imports: [AppModule] })
               .overrideProvider(PrismaService)
-              .useValue(database)
+              .useValue({
+                user: database.user,
+                session: database.session,
+                organization: database.organization,
+                membership: database.membership,
+                $queryRaw: database.$queryRaw.bind(database),
+              })
               .compile();
             app = module.createNestApplication();
             app.setGlobalPrefix('api');
@@ -129,10 +128,12 @@ describe('Authentication and authorization against PostgreSQL', () => {
         .send({ email: `${randomUUID()}@example.test`, password })
         .expect(401);
       expect(wrong.body).toEqual(missing.body);
-      await database.session.updateMany({
-        where: { userId: account.user.id },
-        data: { createdAt: new Date(Date.now() - 120000), expiresAt: new Date(Date.now() - 60000) },
-      });
+      await database.$executeRaw`
+        UPDATE sessions
+        SET created_at = clock_timestamp() - interval '2 minutes',
+            expires_at = clock_timestamp() - interval '1 minute'
+        WHERE user_id = ${account.user.id}::uuid
+      `;
       await request(app.getHttpServer())
         .get('/api/auth/me')
         .set('Authorization', `Bearer ${account.token}`)

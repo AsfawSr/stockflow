@@ -8,6 +8,7 @@ export class PrismaService extends PrismaClient implements OnModuleDestroy {
   constructor(config: ConfigService) {
     const adapter = new PrismaPg({
       connectionString: config.getOrThrow<string>('DATABASE_URL'),
+      options: '-c timezone=UTC',
       connectionTimeoutMillis: 2000,
       statement_timeout: 2000,
       max: 5,
