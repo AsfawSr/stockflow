@@ -57,6 +57,7 @@ model Organization {
   suppliers   Supplier[]
   locations   Location[]
   purchaseOrders PurchaseOrder[]
+  invitations Invitation[]
 
   @@map("organizations")
 }
@@ -293,6 +294,7 @@ model User {
   stockMovements StockMovement[] @relation("StockMovementCreatedBy")
   stockTransfers StockTransfer[] @relation("StockTransferCreatedBy")
   stockAdjustments StockAdjustment[] @relation("StockAdjustmentCreatedBy")
+  sentInvitations Invitation[] @relation("InvitationInvitedBy")
 
   @@map("users")
 }
@@ -350,4 +352,21 @@ model Membership {
   @@unique([organizationId, userId])
   @@index([userId])
   @@map("memberships")
+}
+
+model Invitation {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @map("organization_id") @db.Uuid
+  email          String             @db.VarChar(254)
+  roles          OrganizationRole[]
+  tokenHash      String             @unique @map("token_hash") @db.Char(64)
+  invitedById    String             @map("invited_by_id") @db.Uuid
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt      DateTime           @map("expires_at") @db.Timestamptz(3)
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  invitedBy      User               @relation("InvitationInvitedBy", fields: [invitedById], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, email])
+  @@index([expiresAt])
+  @@map("invitations")
 }
