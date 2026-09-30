@@ -11,10 +11,13 @@
     "dev:api": "npm run start:dev --workspace=@stockflow/api",
     "db:generate": "npm run db:generate --workspace=@stockflow/api",
     "db:validate": "npm run db:validate --workspace=@stockflow/api",
+    "db:migrate": "npm run db:migrate --workspace=@stockflow/api",
+    "db:status": "npm run db:status --workspace=@stockflow/api",
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "test:db": "npm run test:db --workspace=@stockflow/api"
   },
   "engines": {
     "node": ">=22.12.0",

@@ -13,7 +13,7 @@ history.
 
 - `apps/web`: Next.js frontend with TypeScript and the App Router.
 - `apps/api`: NestJS modular monolith for permissions and business workflows.
-- PostgreSQL and Prisma 7: connected persistence layer, with domain models planned next.
+- PostgreSQL and Prisma 7: persistence with organization, user, and membership models.
 - npm workspaces: one repository and one root dependency lockfile.
 
 ## Requirements
@@ -36,11 +36,40 @@ pool has bounded connection and statement timeouts and closes on application shu
 The default `postgres` account is suitable only for initial local setup; use a
 dedicated, least-privilege database account before deployment.
 
-Prisma currently has no domain models or migrations. This setup only performs
-read-only connectivity checks; it does not create tables or modify existing data.
+The initial migration creates `organizations`, `users`, `memberships`, and the
+`organization_role` enum. Run `npm run db:migrate` to apply committed migrations
+to the configured database and `npm run db:status` to inspect migration history.
+The first migration expects no conflicting tables or enum. For an existing schema,
+review and baseline it before migrating; never reset a database to bypass a conflict.
+The migration is transaction-wrapped and does not seed any application records.
+
 Prisma's CLI is a root development dependency shared by the workspace scripts.
 The generated client is ignored by Git and regenerated before API builds, tests,
 type checks, and development startup.
+
+## Identity Data Model
+
+- `Organization`: company name, one currency, UUID, and timestamps.
+- `User`: global unique email, display name, UUID, and timestamps. A user can belong
+	to several organizations; no passwords or authentication endpoints exist yet.
+- `Membership`: links one user to one organization with an explicit, non-empty set
+	of roles: `ADMIN`, `PURCHASER`, `MANAGER`, and `WAREHOUSE`. There is no default role.
+
+PostgreSQL rejects duplicate memberships, missing parent records, blank names,
+null or duplicate roles, and deletion of users or organizations with memberships.
+Emails must be non-empty, lowercase, whitespace-free, and unique. This is a storage
+normalization rule, not full email validation or proof of email ownership.
+Currency codes must be three uppercase letters; validation against the supported
+currency list will belong to the application layer.
+
+Custom checks live in the SQL migration because Prisma does not express them in
+the model schema. Preserve these checks in future migrations. Adding a role also
+requires updating the `memberships_roles_valid_set` check, which uses the enum's
+four current values. Use migrations, not `prisma db push`, to reproduce the schema.
+UUID defaults and `updatedAt` updates are handled by Prisma Client.
+
+These relationships do not enforce request-level tenant isolation or permissions.
+Authentication, organization selection, and membership guards are the next milestone.
 
 ## Local Development
 
@@ -48,6 +77,7 @@ Run these commands from the repository root:
 
 ```sh
 npm install
+npm run db:migrate
 npm run dev:api
 ```
 
@@ -94,6 +124,19 @@ or local credentials, so CI does not need access to your development database.
 Frontend tests cover healthy, unavailable, failed HTTP, wrong-service, and malformed
 JSON responses. Lint currently covers the frontend; type checks cover both apps.
 
+Run real PostgreSQL integration tests separately against a local development or
+dedicated test database, never production:
+
+```sh
+npm run db:migrate
+npm run test:db
+```
+
+The `.db-spec.ts` tests are excluded from `npm test`. They verify Prisma mappings,
+memberships across organizations, uniqueness, foreign keys, role sets, normalization,
+and restricted deletes. All fixture writes run inside transactions that roll back,
+including the Prisma success path. The tests neither reset nor truncate tables.
+
 The initial UI was also checked in a browser at desktop, tablet, and mobile sizes,
 including refresh recovery after starting the API. These manual browser checks are
 not yet part of the automated test suite.
@@ -110,9 +153,10 @@ vulnerabilities. Reassess the overrides when upgrading Prisma.
 
 Milestone 1 is complete: both applications run, the frontend checks the real API,
 and the connection behavior has automated tests. PostgreSQL connectivity through
-Prisma and the API readiness endpoint are now implemented. No inventory data is
-mocked or stored yet. The next steps are organization, user, and membership models,
-followed by authentication and server-side tenant isolation.
+Prisma and the API readiness endpoint are implemented. Organization, user, and
+membership models now have a committed migration and database constraint tests.
+No inventory data is mocked or stored yet. The next steps are authentication and
+server-side tenant isolation before exposing organization-owned business data.
 
 ## Commit Workflow
 

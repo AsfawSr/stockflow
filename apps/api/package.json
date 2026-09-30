@@ -10,10 +10,14 @@
     "start:dev": "nest start --watch",
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
+    "db:migrate": "prisma migrate deploy",
+    "db:status": "prisma migrate status",
     "pretypecheck": "npm run db:generate",
     "typecheck": "tsc --noEmit",
     "pretest": "npm run db:generate",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "pretest:db": "npm run db:generate",
+    "test:db": "jest --runInBand --testRegex=\\.db-spec\\.ts$"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.0",
