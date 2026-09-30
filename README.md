@@ -115,8 +115,11 @@ npm run build
 ```
 
 GitHub Actions runs these checks on Node.js 22 and 24 for pull requests and pushes
-to `main`. The workflow does not deploy either application. Local checks have been
-run with Node.js 24; the Linux/Node.js 22 matrix will be verified by GitHub after push.
+to `main`. Each matrix job starts an isolated PostgreSQL 17 service, applies the
+committed migrations, and runs `npm run test:db` against it. The service credentials
+are disposable test values, not development or production secrets.
+The workflow does not deploy either application. Local checks have been run with
+Node.js 24; the Linux/PostgreSQL 17 matrix will be verified by GitHub after push.
 
 The API tests exercise liveness, readiness success and failure, error redaction,
 and the route prefix. They mock the Prisma provider and do not require PostgreSQL

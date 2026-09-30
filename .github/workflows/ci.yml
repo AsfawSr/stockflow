@@ -21,6 +21,22 @@ jobs:
     strategy:
       matrix:
         node: [22, 24]
+    env:
+      DATABASE_URL: postgresql://stockflow:stockflow_ci@127.0.0.1:5432/stockflow_test?schema=public
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: stockflow
+          POSTGRES_PASSWORD: stockflow_ci
+          POSTGRES_DB: stockflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stockflow -d stockflow_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
@@ -31,11 +47,17 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Validate database schema
+        run: npm run db:validate
       - name: Lint frontend
         run: npm run lint
       - name: Check types
         run: npm run typecheck
       - name: Run tests
         run: npm test
+      - name: Apply database migrations
+        run: npm run db:migrate
+      - name: Test database constraints
+        run: npm run test:db
       - name: Build applications
         run: npm run build
