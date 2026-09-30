@@ -445,6 +445,26 @@ test('account access, cookie privacy, organization selection, and revoked permis
   );
   expect(balances.rows).toEqual([{ quantity: 4 }, { quantity: 5 }]);
 
+  // Reorder points flag low balances and power the low-stock filter.
+  await page.getByRole('link', { name: 'Products', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit USB-C_65W.01', exact: true }).click();
+  const reorderDialog = page.getByRole('dialog', { name: 'Edit USB-C_65W.01', exact: true });
+  await reorderDialog.getByLabel('Reorder point (optional)', { exact: true }).fill('4');
+  await reorderDialog.getByRole('button', { name: 'Save product', exact: true }).click();
+  await expect(reorderDialog).not.toBeVisible();
+  await page.getByRole('link', { name: 'Stock', exact: true }).click();
+  const levelsTable = page.locator('.service-table').first();
+  await expect(
+    levelsTable.getByRole('row', { name: /Retail Store/ }).getByText('Low', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    levelsTable.getByRole('row', { name: /Main Warehouse/ }).getByText('Low', { exact: true }),
+  ).toHaveCount(0);
+  await page.locator('.catalog-toolbar').getByLabel('Show', { exact: true }).selectOption('low');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(levelsTable.getByRole('row', { name: /Retail Store/ })).toBeVisible();
+  await expect(levelsTable.getByRole('row', { name: /Main Warehouse/ })).toHaveCount(0);
+
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
 

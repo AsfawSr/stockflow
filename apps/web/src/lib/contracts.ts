@@ -93,6 +93,7 @@ export const productSchema = z.object({
   name: z.string().min(1),
   description: z.string().nullable(),
   unit: z.string().min(1),
+  reorderPoint: z.number().int().nonnegative().nullable(),
   archivedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
@@ -118,6 +119,16 @@ export const productInputSchema = z.object({
     .trim()
     .max(2000, 'Use at most 2,000 characters.')
     .transform((value) => value || null),
+  reorderPoint: z
+    .string()
+    .trim()
+    .default('')
+    .refine(
+      (value) => value === '' || /^\d{1,7}$/.test(value),
+      'Enter a whole number of 0 or more.',
+    )
+    .transform((value) => (value === '' ? null : Number(value)))
+    .refine((value) => value === null || value <= 1000000, 'Use at most 1,000,000.'),
 });
 export const productStatusSchema = z.enum(['active', 'archived', 'all']);
 export const catalogQuerySchema = z.object({
@@ -312,9 +323,10 @@ export const movementTypeTone: Record<StockMovementType, 'online' | 'offline' | 
 export const stockLevelListSchema = z.object({
   items: z.array(
     z.object({
-      product: orderProductSchema,
+      product: orderProductSchema.extend({ reorderPoint: z.number().int().nullable() }),
       location: orderPartySchema,
       quantity: z.number().int().nonnegative(),
+      low: z.boolean(),
       updatedAt: z.iso.datetime(),
     }),
   ),

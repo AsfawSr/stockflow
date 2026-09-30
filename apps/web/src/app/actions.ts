@@ -220,6 +220,7 @@ function productFormValues(form: FormData) {
     name: String(form.get('name') ?? ''),
     unit: String(form.get('unit') ?? ''),
     description: String(form.get('description') ?? ''),
+    reorderPoint: String(form.get('reorderPoint') ?? ''),
   };
 }
 

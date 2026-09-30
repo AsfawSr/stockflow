@@ -228,7 +228,7 @@ cover the remaining hand-entered movements.
 
 | Method | Path | Behavior |
 | --- | --- | --- |
-| GET | `/levels` | On-hand quantity per product and location; filter by location, search by product name or SKU, paginated. |
+| GET | `/levels` | On-hand quantity per product and location with a `low` flag; filter by location or `low=true`, search by product name or SKU, paginated. |
 | GET | `/movements` | Full movement history, newest first, with a human-readable detail per entry; filter by product or location. |
 | POST | `/transfers` | Move a positive quantity between two different locations; optional note. |
 | POST | `/adjustments` | Positive or negative correction with a required reason; zero is rejected. |
@@ -242,7 +242,11 @@ constraints enforce the same rules again underneath. Transfers to archived
 locations are rejected, while adjustments at archived locations remain possible
 for closing corrections. Movement details render as the adjustment reason or
 `Source to Destination - note` for transfers; deliveries show their purchase
-order number. The tests cover the report shapes, filters, every boundary
+order number. Products carry an optional reorder point (0 to 1,000,000, enforced
+by a database check); a balance at or below its product's reorder point is
+flagged `low`, and `low=true` narrows the report to those rows with a SQL join,
+since the comparison crosses tables. The tests cover the report shapes, filters,
+every boundary
 (insufficient stock, same location, zero or unreasoned adjustments, archived
 destinations, cross-tenant references), role separation, and committed-data
 concurrency for simultaneous transfers of the same stock.
@@ -382,8 +386,10 @@ launch, add a durable mail queue, retry/monitoring, and appropriate abuse contro
   Search, filter, and paging run server-side through GET parameters, so catalog URLs
   are shareable. Product mutations are server actions that revalidate the list, map
   duplicate SKUs to a clear message, and never expose other organizations' data.- `/workspace/:organizationId/stock` shows on-hand balances per product and location
-  with a location filter, product search, and pagination, plus the latest movement
-  history with type badges and human-readable details. Admins and warehouse members
+  with a location filter, product search, a low-stock filter, and pagination, plus
+  the latest movement
+  history with type badges and human-readable details. Products can carry a reorder
+  point; balances at or below it show a Low badge. Admins and warehouse members
   record transfers and adjustments through dialogs whose fields are controlled state,
   so a rejected submission (such as insufficient stock) keeps the entered values;
   other members see a read-only report.- `/status` remains public and displays web, API, and PostgreSQL health.
@@ -546,7 +552,8 @@ balances in PostgreSQL, and checks that a purchaser can read stock but sees no
 transfer or adjustment controls. It also invites an address before its account
 exists, revokes and re-issues the invitation, and later has the invited user
 accept through the emailed link, land in the workspace with the invited role,
-and get a clear error on link reuse.
+and get a clear error on link reuse. It sets a reorder point on the product and
+verifies the Low badge and the low-stock filter on the stock screen.
 It checks desktop, tablet,
 and mobile widths, including long organization names, and saves ignored screenshots
 under `apps/web/test-results`. Browser fixture records are committed during the
@@ -586,8 +593,9 @@ and reasoned adjustments with row-level locking and no-negative guarantees, plus
 stock overview screen with balances, filters, movement history, and role-guarded
 transfer and adjustment dialogs. Member invitations now work end to end: admins
 invite, list, and revoke by email, and invitees join through single-use emailed
-links bound to their verified address. Low-stock indicators and production mail
-hardening are next.
+links bound to their verified address. Products carry optional reorder points
+that flag low balances and power a low-stock report. Production mail hardening
+and scheduled cleanup of expired records are next.
 
 ## Commit Workflow
 

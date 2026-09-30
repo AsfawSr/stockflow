@@ -69,10 +69,16 @@ test('covers every movement type with a label and tone', () => {
 });
 
 test('validates stock level and movement list responses', () => {
-  const product = { id: uuid, sku: 'STOCK-01', name: 'Stock Product', unit: 'piece' };
+  const product = {
+    id: uuid,
+    sku: 'STOCK-01',
+    name: 'Stock Product',
+    unit: 'piece',
+    reorderPoint: 4,
+  };
   const location = { id: otherUuid, name: 'Main Warehouse' };
   const levels = {
-    items: [{ product, location, quantity: 5, updatedAt: new Date().toISOString() }],
+    items: [{ product, location, quantity: 5, low: false, updatedAt: new Date().toISOString() }],
     total: 1,
     page: 1,
     pageSize: 20,
@@ -82,6 +88,13 @@ test('validates stock level and movement list responses', () => {
     stockLevelListSchema.safeParse({
       ...levels,
       items: [{ ...levels.items[0], quantity: -1 }],
+    }).success,
+    false,
+  );
+  assert.equal(
+    stockLevelListSchema.safeParse({
+      ...levels,
+      items: [{ ...levels.items[0], low: 'yes' }],
     }).success,
     false,
   );

@@ -13,6 +13,7 @@ const product = {
   name: 'USB-C Charger',
   description: null,
   unit: 'piece',
+  reorderPoint: null,
   archivedAt: null,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
@@ -24,13 +25,19 @@ test('normalizes product input and stores empty descriptions as null', () => {
     name: ' USB-C Charger ',
     unit: ' piece ',
     description: '  ',
+    reorderPoint: ' 5 ',
   });
   assert.deepEqual(parsed, {
     sku: 'USB-C_65W.01',
     name: 'USB-C Charger',
     unit: 'piece',
     description: null,
+    reorderPoint: 5,
   });
+  assert.equal(
+    productInputSchema.parse({ sku: 'A', name: 'B', unit: 'c', description: '' }).reorderPoint,
+    null,
+  );
 });
 
 test('rejects malformed SKUs, blank fields, and oversized input', () => {
@@ -44,6 +51,10 @@ test('rejects malformed SKUs, blank fields, and oversized input', () => {
     { ...valid, name: '   ' },
     { ...valid, unit: ' ' },
     { ...valid, description: 'a'.repeat(2001) },
+    { ...valid, reorderPoint: '-1' },
+    { ...valid, reorderPoint: '2.5' },
+    { ...valid, reorderPoint: '1000001' },
+    { ...valid, reorderPoint: 'ten' },
   ]) {
     assert.equal(productInputSchema.safeParse(invalid).success, false, JSON.stringify(invalid));
   }

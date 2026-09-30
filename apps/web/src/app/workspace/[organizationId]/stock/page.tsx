@@ -20,6 +20,7 @@ const querySchema = z.object({
     .string()
     .optional()
     .transform((value) => (value && z.uuid().safeParse(value).success ? value : undefined)),
+  show: z.enum(['all', 'low']).optional(),
   search: z.string().trim().max(160).optional(),
   page: z.coerce.number().int().min(1).max(100000).optional(),
 });
@@ -40,6 +41,7 @@ export default async function StockPage({
   const query = rawQuery.success ? rawQuery.data : querySchema.parse({});
   const levelsQuery = new URLSearchParams();
   if (query.location) levelsQuery.set('locationId', query.location);
+  if (query.show === 'low') levelsQuery.set('low', 'true');
   if (query.search) levelsQuery.set('search', query.search);
   if (query.page) levelsQuery.set('page', String(query.page));
 
@@ -89,6 +91,7 @@ export default async function StockPage({
   const pageLink = (target: number) => {
     const linkQuery = new URLSearchParams();
     if (query.location) linkQuery.set('location', query.location);
+    if (query.show === 'low') linkQuery.set('show', 'low');
     if (query.search) linkQuery.set('search', query.search);
     if (target > 1) linkQuery.set('page', String(target));
     const suffix = linkQuery.toString();
@@ -140,6 +143,11 @@ export default async function StockPage({
               </option>
             ))}
           </select>
+          <label htmlFor="stock-show">Show</label>
+          <select id="stock-show" name="show" defaultValue={query.show ?? 'all'}>
+            <option value="all">All balances</option>
+            <option value="low">Low stock</option>
+          </select>
           <button type="submit" className="secondary-button">
             Apply
           </button>
@@ -150,10 +158,14 @@ export default async function StockPage({
         <div className="empty-organizations">
           <Boxes size={38} strokeWidth={1.3} aria-hidden="true" />
           <h2>
-            {total === 0 && !query.search && !query.location ? 'No stock yet' : 'No matching stock'}
+            {total === 0 && !query.search && !query.location && query.show !== 'low'
+              ? 'No stock yet'
+              : 'No matching stock'}
           </h2>
           <p className="muted">
-            Stock appears here after deliveries, transfers, or opening adjustments.
+            {query.show === 'low'
+              ? 'No balances are at or below their reorder points.'
+              : 'Stock appears here after deliveries, transfers, or opening adjustments.'}
           </p>
         </div>
       ) : (
@@ -166,6 +178,7 @@ export default async function StockPage({
                   <th scope="col">SKU</th>
                   <th scope="col">LOCATION</th>
                   <th scope="col">ON HAND</th>
+                  <th scope="col">REORDER AT</th>
                   <th scope="col">UPDATED</th>
                 </tr>
               </thead>
@@ -178,8 +191,17 @@ export default async function StockPage({
                     </td>
                     <td>{level.location.name}</td>
                     <td>
-                      {level.quantity} {level.product.unit}
+                      <span className="quantity-cell">
+                        {level.quantity} {level.product.unit}
+                        {level.low && (
+                          <span className="badge offline">
+                            <span />
+                            Low
+                          </span>
+                        )}
+                      </span>
                     </td>
+                    <td>{level.product.reorderPoint ?? '\u2014'}</td>
                     <td>{formatDate(level.updatedAt)}</td>
                   </tr>
                 ))}

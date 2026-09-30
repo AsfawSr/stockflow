@@ -13,6 +13,7 @@ function ProductFields({ state, product }: { state: FormState; product?: Product
     name: product?.name ?? '',
     unit: product?.unit ?? '',
     description: product?.description ?? '',
+    reorderPoint: product?.reorderPoint === null ? '' : String(product?.reorderPoint ?? ''),
   };
   return (
     <>
@@ -59,6 +60,26 @@ function ProductFields({ state, product }: { state: FormState; product?: Product
           aria-describedby={state.fieldErrors?.unit ? 'unit-error' : undefined}
         />
         <FieldError name="unit" state={state} />
+      </div>
+      <div className="form-field">
+        <label htmlFor={`${id}-reorderPoint`}>Reorder point (optional)</label>
+        <input
+          id={`${id}-reorderPoint`}
+          name="reorderPoint"
+          type="number"
+          min={0}
+          max={1000000}
+          step={1}
+          defaultValue={values.reorderPoint}
+          aria-invalid={Boolean(state.fieldErrors?.reorderPoint)}
+          aria-describedby={
+            state.fieldErrors?.reorderPoint ? 'reorderPoint-error' : `${id}-reorderPoint-hint`
+          }
+        />
+        <p id={`${id}-reorderPoint-hint`} className="field-hint">
+          Stock at or below this level is flagged as low.
+        </p>
+        <FieldError name="reorderPoint" state={state} />
       </div>
       <div className="form-field">
         <label htmlFor={`${id}-description`}>Description (optional)</label>
