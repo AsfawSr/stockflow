@@ -1272,6 +1272,28 @@ dd {
     flex: 1;
   }
 }
+.recovery-symbol {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 24px;
+  border-radius: 7px;
+  color: var(--green);
+  background: var(--green-soft);
+}
+.recovery-form {
+  margin-top: 30px;
+}
+.recovery-back {
+  margin-top: 24px;
+}
+.verification-address {
+  margin-top: 14px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -10,6 +10,8 @@ import { AppModule } from '../src/app.module';
 import { Prisma, PrismaClient } from '../src/generated/prisma/client';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AccountMailer, AccountEmail } from '../src/auth/account-mailer.service';
+import { AccountService } from '../src/auth/account.service';
+import { PasswordService } from '../src/auth/password.service';
 
 describe('Authentication and authorization against PostgreSQL', () => {
   let prisma: PrismaClient;
@@ -519,6 +521,49 @@ describe('Authentication and authorization against PostgreSQL', () => {
         .expect(200);
     });
   });
+
+  it('allows only one concurrent token consumer and only one competing password reset', async () => {
+    outbox.length = 0;
+    const passwords = new PasswordService();
+    const email = `${randomUUID()}@example.test`;
+    const user = await prisma.user.create({
+      data: {
+        email,
+        displayName: 'Concurrent Recovery Test',
+        credential: { create: { passwordHash: await passwords.hash(password) } },
+      },
+    });
+    const accounts = new AccountService(prisma as PrismaService, passwords, {
+      webOrigin: 'http://127.0.0.1:3000',
+      send: async (message: AccountEmail) => {
+        outbox.push(message);
+      },
+    } as AccountMailer);
+    try {
+      await accounts.sendVerification(user.id);
+      const verification = mailToken(email, '/verify-email/confirm');
+      const verified = await Promise.allSettled([
+        accounts.verifyEmail(verification),
+        accounts.verifyEmail(verification),
+      ]);
+      expect(verified.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(verified.filter((result) => result.status === 'rejected')).toHaveLength(1);
+      await accounts.requestReset(email);
+      const first = mailToken(email, '/reset-password');
+      await accounts.requestReset(email);
+      const second = mailToken(email, '/reset-password');
+      const results = await Promise.allSettled([
+        accounts.resetPassword(first, 'first new concurrent passphrase'),
+        accounts.resetPassword(second, 'second new concurrent passphrase'),
+      ]);
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).authVersion).toBe(1);
+      expect(await prisma.accountToken.count({ where: { userId: user.id } })).toBe(0);
+    } finally {
+      await prisma.user.deleteMany({ where: { id: user.id, email } });
+    }
+  }, 15000);
 
   it('does not claim an existing identity without credentials through registration', async () => {
     await withApplication(async (app, database) => {

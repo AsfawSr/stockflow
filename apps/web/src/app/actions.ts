@@ -5,6 +5,9 @@ import { revalidatePath } from 'next/cache';
 import { apiRequest } from '@/lib/api-client';
 import {
   emptySchema,
+  accountTokenSchema,
+  messageSchema,
+  resetPasswordSchema,
   loginSchema,
   membershipSchema,
   organizationIdSchema,
@@ -39,7 +42,7 @@ export async function loginAction(_previous: FormState, form: FormData): Promise
       values,
     };
   await saveSession(result.data.accessToken, result.data.expiresAt);
-  redirect('/organizations');
+  redirect(result.data.user.emailVerifiedAt ? '/organizations' : '/verify-email');
 }
 
 export async function signupAction(_previous: FormState, form: FormData): Promise<FormState> {
@@ -60,7 +63,75 @@ export async function signupAction(_previous: FormState, form: FormData): Promis
   });
   if (!result.ok) return { error: result.error, values };
   await saveSession(result.data.accessToken, result.data.expiresAt);
-  redirect('/organizations');
+  redirect(
+    result.data.verificationEmailSent ? '/verify-email' : '/verify-email?notice=delivery-failed',
+  );
+}
+
+export async function resendVerificationAction(): Promise<FormState> {
+  const result = await actionRequest('/auth/email/verification', messageSchema, { method: 'POST' });
+  return result.ok
+    ? { success: 'Verification link requested. Check your email.' }
+    : { error: result.error };
+}
+
+export async function verifyEmailAction(_previous: FormState, form: FormData): Promise<FormState> {
+  const token = accountTokenSchema.safeParse(form.get('token'));
+  if (!token.success) return { error: 'This link is invalid or expired. Request a new link.' };
+  const result = await apiRequest('/auth/email/verify', messageSchema, {
+    method: 'POST',
+    body: { token: token.data },
+  });
+  if (!result.ok)
+    return {
+      error:
+        result.status === 400
+          ? 'This link is invalid or expired. Request a new link.'
+          : result.error,
+    };
+  revalidatePath('/');
+  redirect('/login?notice=email-verified');
+}
+
+export async function requestPasswordResetAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const email = loginSchema.shape.email.safeParse(form.get('email'));
+  if (!email.success) return { fieldErrors: { email: ['Enter a valid email address.'] } };
+  const result = await apiRequest('/auth/password/reset-request', messageSchema, {
+    method: 'POST',
+    body: { email: email.data },
+  });
+  return result.ok
+    ? { success: 'If an account exists for this address, a reset link will be sent.' }
+    : { error: result.error, values: { email: email.data } };
+}
+
+export async function resetPasswordAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const token = accountTokenSchema.safeParse(form.get('token'));
+  if (!token.success) return { error: 'This link is invalid or expired. Request a new link.' };
+  const parsed = resetPasswordSchema.safeParse({
+    password: form.get('password'),
+    confirmPassword: form.get('confirmPassword'),
+  });
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  const result = await apiRequest('/auth/password/reset', messageSchema, {
+    method: 'POST',
+    body: { token: token.data, password: parsed.data.password },
+  });
+  if (!result.ok)
+    return {
+      error:
+        result.status === 400
+          ? 'This link is invalid or expired. Request a new link.'
+          : result.error,
+    };
+  await clearSession();
+  redirect('/login?notice=password-reset');
 }
 
 export async function logoutAction(): Promise<void> {

@@ -6,6 +6,8 @@ export const metadata = { title: 'Sign in' };
 
 const notices: Record<string, string> = {
   expired: 'Your session ended. Sign in to continue.',
+  'email-verified': 'Email verified. You can now sign in.',
+  'password-reset': 'Password updated. Sign in with your new password.',
   'signed-out': 'You have signed out.',
   'logout-unconfirmed':
     'Signed out on this device. Server session revocation could not be confirmed.',

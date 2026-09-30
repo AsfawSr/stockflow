@@ -61,6 +61,11 @@ export function AuthForm({ mode, notice }: { mode: 'login' | 'signup'; notice?: 
           <FieldError name="email" state={state} />
         </div>
         <PasswordField name="password" label="Password" signup={signup} state={state} />
+        {!signup && (
+          <Link className="text-link" href="/forgot-password">
+            Forgot password?
+          </Link>
+        )}
         {signup && (
           <PasswordField name="confirmPassword" label="Confirm password" signup state={state} />
         )}

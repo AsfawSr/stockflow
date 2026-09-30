@@ -52,12 +52,13 @@ export async function authenticatedRequest<Data>(
 
 export const currentUser = cache(() => authenticatedRequest('/auth/me', userSchema));
 
-export async function requireUser() {
+export async function requireUser(allowUnverified = false) {
   const result = await currentUser();
   if (!result.ok) {
     if (result.status === 401) redirect('/login?notice=expired');
     throw new Error('The StockFlow API is unavailable.');
   }
+  if (!allowUnverified && !result.data.emailVerifiedAt) redirect('/verify-email');
   return result.data;
 }
 

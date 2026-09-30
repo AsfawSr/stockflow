@@ -8,14 +8,36 @@ import {
   sessionSchema,
   signupSchema,
   userSchema,
+  resetPasswordSchema,
+  accountTokenSchema,
 } from '../src/lib/contracts';
 
 const user = {
   id: '8ed13b94-fd8b-4079-848e-f22edaa8ce05',
   email: 'user@example.test',
   displayName: 'User',
+  emailVerifiedAt: null,
 };
 const password = 'a long test passphrase';
+
+test('requires an explicit verification state in authenticated profiles', () => {
+  const missing = { id: user.id, email: user.email, displayName: user.displayName };
+  assert.equal(userSchema.safeParse(missing).success, false);
+  assert.equal(userSchema.safeParse(user).success, true);
+});
+
+test('validates recovery tokens and matching new passwords', () => {
+  assert.equal(accountTokenSchema.safeParse('a'.repeat(43)).success, true);
+  assert.equal(accountTokenSchema.safeParse('short').success, false);
+  assert.equal(
+    resetPasswordSchema.safeParse({ password, confirmPassword: password }).success,
+    true,
+  );
+  assert.equal(
+    resetPasswordSchema.safeParse({ password, confirmPassword: 'different' }).success,
+    false,
+  );
+});
 
 test('normalizes email without modifying passwords', () => {
   assert.deepEqual(loginSchema.parse({ email: ' USER@EXAMPLE.TEST ', password: ` ${password} ` }), {

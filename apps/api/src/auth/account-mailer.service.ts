@@ -58,7 +58,7 @@ export class AccountMailer implements OnModuleDestroy {
       });
       return;
     }
-    const directory = resolve(process.cwd(), '.local/mail');
+    const directory = resolve(__dirname, '../../.local/mail');
     await mkdir(directory, { recursive: true, mode: 0o700 });
     const recipientHash = createHash('sha256').update(message.to).digest('hex');
     await writeFile(

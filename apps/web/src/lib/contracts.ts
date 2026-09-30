@@ -4,12 +4,14 @@ export const userSchema = z.object({
   id: z.uuid(),
   email: z.email(),
   displayName: z.string().min(1),
+  emailVerifiedAt: z.iso.datetime().nullable(),
 });
 
 export const sessionSchema = z.object({
   user: userSchema,
   accessToken: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
   expiresAt: z.iso.datetime().refine((value) => Date.parse(value) > Date.now()),
+  verificationEmailSent: z.boolean().optional(),
 });
 
 export const roleSchema = z.enum(['ADMIN', 'PURCHASER', 'MANAGER', 'WAREHOUSE']);
@@ -24,12 +26,23 @@ export const membershipSchema = organizationSchema.extend({ roles: z.array(roleS
 export const organizationsSchema = z.array(membershipSchema);
 export const membersSchema = z.array(
   z.object({
-    user: userSchema,
+    user: userSchema.omit({ emailVerifiedAt: true }),
     roles: z.array(roleSchema).min(1),
     createdAt: z.iso.datetime(),
   }),
 );
 export const emptySchema = z.null();
+export const messageSchema = z.object({ message: z.string() });
+export const accountTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+export const resetPasswordSchema = z
+  .object({
+    password: z.string().min(12, 'Use at least 12 characters.').max(128),
+    confirmPassword: z.string(),
+  })
+  .refine((input) => input.password === input.confirmPassword, {
+    path: ['confirmPassword'],
+    message: 'Passwords must match.',
+  });
 export const organizationIdSchema = z.uuid();
 
 export const loginSchema = z.object({

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { config } from 'dotenv';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFile, readdir, stat, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Client } from 'pg';
 
@@ -11,10 +12,14 @@ const firstName = `Browser ${runId.slice(0, 8)} North`;
 const renamed = `${firstName} Updated`;
 const longName = `Browser ${runId.slice(0, 8)} ${'Warehouse'.repeat(14)}`;
 const organizationIds: string[] = [];
+const mailDirectory = resolve(__dirname, '../../api/.local/mail');
+const mailPrefixes = emails.map((email) => createHash('sha256').update(email).digest('hex') + '-');
 let database: Client;
 
 test.beforeAll(async () => {
   config({ path: resolve(__dirname, '../../api/.env'), quiet: true });
+  if (process.env.MAIL_TRANSPORT && process.env.MAIL_TRANSPORT !== 'file')
+    throw new Error('Browser tests require MAIL_TRANSPORT=file, never external SMTP.');
   if (!process.env.DATABASE_URL)
     throw new Error(
       'DATABASE_URL is required for browser fixture cleanup. Use a development or test database.',
@@ -59,8 +64,46 @@ test.afterAll(async () => {
     throw error;
   } finally {
     await database.end();
+    const files = await readdir(mailDirectory).catch(() => []);
+    for (const file of files.filter((name) =>
+      mailPrefixes.some((prefix) => name.startsWith(prefix)),
+    )) {
+      await unlink(resolve(mailDirectory, file));
+    }
   }
 });
+
+async function accountLink(email: string, path: string) {
+  const prefix = createHash('sha256').update(email).digest('hex') + '-';
+  const names = (await readdir(mailDirectory)).filter((name) => name.startsWith(prefix));
+  const messages = await Promise.all(
+    names.map(async (name) => ({
+      data: JSON.parse(await readFile(resolve(mailDirectory, name), 'utf8')) as {
+        to: string;
+        actionUrl: string;
+      },
+      time: (await stat(resolve(mailDirectory, name))).mtimeMs,
+    })),
+  );
+  const match = messages
+    .filter(({ data }) => data.to === email && new URL(data.actionUrl).pathname === path)
+    .sort((left, right) => right.time - left.time)[0];
+  if (!match) throw new Error('Expected development account email was not delivered.');
+  expect(new URL(match.data.actionUrl).origin).toBe('http://127.0.0.1:3000');
+  expect(new URL(match.data.actionUrl).search).toBe('');
+  return match.data.actionUrl;
+}
+
+async function verifyAccount(page: Page, email: string) {
+  await expect(page).toHaveURL(/\/verify-email$/);
+  await page.goto('/organizations');
+  await expect(page).toHaveURL(/\/verify-email$/);
+  await page.goto(await accountLink(email, '/verify-email/confirm'));
+  await expect(page.getByRole('button', { name: 'Verify email', exact: true })).toBeVisible();
+  await expect.poll(() => new URL(page.url()).hash).toBe('');
+  await page.getByRole('button', { name: 'Verify email', exact: true }).click();
+  await expect(page).toHaveURL(/\/organizations$/);
+}
 
 async function fillSignup(page: Page, email: string) {
   await page.getByLabel('Full name', { exact: true }).fill('Browser Test Operator');
@@ -127,6 +170,17 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await expect(page.getByLabel('Email address', { exact: true })).toHaveValue(emails[0]);
   await fillSignup(page, emails[0]);
   await page.getByRole('button', { name: 'Create account', exact: true }).click();
+  await expect(page).toHaveURL(/\/verify-email$/);
+  await checkLayouts(page);
+  await page.screenshot({ path: testInfo.outputPath('verification-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: testInfo.outputPath('verification-mobile.png'), fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole('button', { name: 'Resend verification email', exact: true }).click();
+  await expect(page.locator('form').getByRole('status')).toContainText(
+    'Verification link requested.',
+  );
+  await verifyAccount(page, emails[0]);
   await expect(page).toHaveURL(/\/organizations$/);
   await expect(
     page.getByRole('heading', { name: 'No organizations yet', exact: true }),
@@ -209,9 +263,51 @@ test('account access, cookie privacy, organization selection, and revoked permis
     false,
   );
 
+  await page.getByRole('link', { name: 'Forgot password?', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Reset your password', exact: true }),
+  ).toBeVisible();
+  await page.getByLabel('Email address', { exact: true }).fill(emails[0]);
+  await page.getByRole('button', { name: 'Send reset link', exact: true }).click();
+  await expect(page.locator('form').getByRole('status')).toContainText('If an account exists');
+  const resetLink = await accountLink(emails[0], '/reset-password');
+  await page.goto(resetLink);
+  await expect(
+    page.getByRole('heading', { name: 'Choose a new password', exact: true }),
+  ).toBeVisible();
+  await expect.poll(() => new URL(page.url()).hash).toBe('');
+  await checkLayouts(page);
+  await page.screenshot({ path: testInfo.outputPath('reset-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: testInfo.outputPath('reset-mobile.png'), fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const newPassword = 'a changed browser-only passphrase';
+  await page.getByLabel('New password', { exact: true }).fill(newPassword);
+  await page.getByLabel('Confirm password', { exact: true }).fill(newPassword);
+  await page.getByRole('button', { name: 'Update password', exact: true }).click();
+  await expect(page).toHaveURL(/\/login\?notice=password-reset$/);
+  await page.goto(resetLink);
+  await page.getByLabel('New password', { exact: true }).fill(newPassword);
+  await page.getByLabel('Confirm password', { exact: true }).fill(newPassword);
+  await page.getByRole('button', { name: 'Update password', exact: true }).click();
+  await expect(page.locator('form').getByRole('alert')).toContainText('invalid or expired');
+  await page.goto('/login');
+  await page.getByLabel('Email address', { exact: true }).fill(emails[0]);
+  await page.getByLabel('Password', { exact: true }).fill(password);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.locator('form').getByRole('alert')).toContainText(
+    'Email or password is incorrect.',
+  );
+  await page.getByLabel('Password', { exact: true }).fill(newPassword);
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page).toHaveURL(/\/organizations$/);
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page).toHaveURL(/\/login\?notice=signed-out$/);
+
   await page.goto('/signup');
   await fillSignup(page, emails[1]);
   await page.getByRole('button', { name: 'Create account', exact: true }).click();
+  await verifyAccount(page, emails[1]);
   await expect(page).toHaveURL(/\/organizations$/);
   await page.goto(`/workspace/${firstId}`);
   await expect(page).toHaveURL(/\/organizations\?notice=unavailable$/);

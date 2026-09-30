@@ -46,6 +46,9 @@ review and baseline it before migrating; never reset a database to bypass a conf
 The migration is transaction-wrapped and does not seed any application records.
 The second migration adds separate `password_credentials` and `sessions` tables
 without changing existing users or memberships.
+The third adds `account_tokens`, email verification state, and credential versions.
+Existing users remain unverified until they complete verification or password reset;
+the migration does not silently verify any account.
 
 Prisma's CLI is a root development dependency shared by the workspace scripts.
 The generated client is ignored by Git and regenerated before API builds, tests,
@@ -78,14 +81,19 @@ API routes additionally use current membership guards and scoped database querie
 ## Authentication API
 
 All endpoints are under `/api`. Routes require a bearer session by default;
-registration, login, liveness, and readiness are explicitly public.
+registration, login, email-link confirmation, reset requests, liveness, and readiness
+are explicitly public.
 
 | Method | Path | Behavior |
 | --- | --- | --- |
 | POST | `/auth/register` | Create a user and a session atomically; returns 201. |
 | POST | `/auth/login` | Check credentials and issue a new session; returns 200. |
-| GET | `/auth/me` | Return only the authenticated user's id, email, and display name. |
+| GET | `/auth/me` | Return the user's id, email, display name, and `emailVerifiedAt`. |
 | POST | `/auth/logout` | Revoke the current session immediately; returns 204. |
+| POST | `/auth/email/verification` | Authenticated resend request; returns 200, or 503 on delivery failure. |
+| POST | `/auth/email/verify` | Consume `{ token }` and verify its account; returns 200. |
+| POST | `/auth/password/reset-request` | Accept `{ email }`; always returns the same 202 message for known/unknown accounts. |
+| POST | `/auth/password/reset` | Consume `{ token, password }`, replace credentials, and revoke sessions; returns 200. |
 
 Registration accepts only `email`, `displayName`, and `password`; login accepts only
 `email` and `password`. Emails are trimmed and lowercased. New passwords must contain
@@ -94,7 +102,9 @@ three iterations, and parallelism one. Unknown-user login verifies a dummy hash 
 returns the same 401 response as a wrong password. Duplicate registration returns
 409 and does not claim an existing user or change their credentials.
 
-Registration and login return `{ user, accessToken, expiresAt }`. Send the token only
+Registration and login return `{ user, accessToken, expiresAt }`; registration also
+reports `verificationEmailSent`. Email failure leaves the created account unverified
+and allows a later resend. Send the session token only
 in `Authorization: Bearer <accessToken>`, never a URL. Tokens have 256 bits of entropy,
 expire after eight hours, and are stored only as SHA-256 digests. These are opaque,
 revocable sessions, not JWTs. Responses are marked `Cache-Control: no-store`.
@@ -109,10 +119,57 @@ requires shared rate-limit storage and a carefully configured trusted proxy.
 
 The Next.js interface uses server actions and HTTP-only session cookies; bearer
 tokens are never returned to client components or stored in localStorage.
-Use HTTPS outside local development. Email verification, password
-reset/change, scheduled expired-session cleanup, and distributed rate limiting are
-still required before public production use. Registration does not verify email
-ownership, and its conflict response can reveal account existence.
+Use HTTPS outside local development. Signed-in password changes, scheduled expired
+record cleanup, shared rate limiting, and production mail monitoring are still
+required before public deployment. Registration alone does not prove email ownership;
+organization access requires completing an email link. Its conflict response can
+still reveal account existence.
+
+## Verification and Recovery Email
+
+New accounts are redirected to `/verify-email`, which allows resend and sign-out.
+Verification links expire after 24 hours; reset links expire after 30 minutes. Only
+SHA-256 token digests are stored in the database. Each link is bound to its purpose,
+user, email address, and credential version. Completing verification invalidates
+other verification links. Reset changes the password, verifies control of the email,
+deletes existing sessions and outstanding account links, and increments the credential
+version. A login already in flight with the old password cannot create a usable session.
+Concurrent token claims are serialized and tested using real PostgreSQL transactions.
+
+Links use URL fragments, which are not sent with the page GET request. The frontend
+removes the fragment from the address bar after loading and submits the token only
+after explicit form confirmation. GET requests do not consume links. Tokens and
+passwords are not returned in action error state, and recovery pages set no-referrer
+and no-index metadata. Missing, expired, reused, and wrong-purpose links are rejected.
+Resends/reset requests are limited to three per minute per IP and route; reset
+confirmation is limited to five, and verification confirmation to ten.
+
+Development defaults to `MAIL_TRANSPORT=file`. Messages are saved as private local
+JSON files under `apps/api/.local/mail`, never served by an HTTP endpoint. After signup
+or a reset request, open the generated message and use its `actionUrl` in the browser.
+These files contain live bearer links: keep the directory private and delete messages
+after testing. Git ignores the entire directory. No external email is sent in this mode.
+
+For SMTP, configure the API's ignored environment file using `.env.example`:
+
+```dotenv
+NODE_ENV=production
+WEB_ORIGIN=https://stockflow.example.com
+MAIL_TRANSPORT=smtp
+MAIL_FROM=StockFlow <no-reply@your-domain.example>
+SMTP_HOST=smtp.your-provider.example
+SMTP_PORT=587
+SMTP_USER=your-smtp-user
+SMTP_PASSWORD=your-smtp-password
+```
+
+Use real provider credentials only in local/server environment configuration, never
+in Git or chat. Port 465 uses implicit TLS; other ports require STARTTLS. Production
+rejects file delivery and requires an HTTPS `WEB_ORIGIN`. Links are built from that
+configured origin, not client headers. Real SMTP delivery has not been exercised in
+the local test suite. Mail sending is currently synchronous: reset responses conceal
+account existence in their body, but timing differences can remain. Before public
+launch, add a durable mail queue, retry/monitoring, and appropriate abuse controls.
 
 ## Frontend Account Workflow
 
@@ -124,6 +181,8 @@ ownership, and its conflict response can reveal account existence.
 - `/workspace/:organizationId` shows the real organization and current roles.
 	Admins can rename the organization and inspect its members; other members cannot.
 - `/status` remains public and displays web, API, and PostgreSQL health.
+- `/verify-email` gates unverified accounts; `/verify-email/confirm` consumes email links.
+- `/forgot-password` requests recovery; `/reset-password` accepts a new password from a valid link.
 
 Authentication cookies are HTTP-only, SameSite=Lax, and expire with the API session.
 Production uses Secure cookies with `__Host-` names and requires HTTPS; local
@@ -142,20 +201,19 @@ not be confirmed. No password or token is included in form error state.
 Server-to-server requests currently share the Next.js server's source IP for NestJS
 rate limiting. Before public deployment, add trusted-ingress client attribution and
 appropriate shared/per-client abuse limits; do not blindly trust forwarded headers.
-This is not yet a production-ready identity service: email verification, recovery,
-and the other hardening items above are still pending. No inactive recovery links
-or simulated inventory screens are presented in this milestone.
+Production mail reliability and the hardening items above remain outstanding.
+No simulated inventory screens are presented in this milestone.
 
 ## Organization Access
 
-Every organization route requires a valid bearer session. The identity comes from
+Every organization route requires a valid bearer session and verified email. The identity comes from
 the server-side session, never a submitted user id. A user selects an organization
 using its URL id; arbitrary headers cannot change the authorization scope.
 
 | Method | Path | Required access |
 | --- | --- | --- |
 | GET | `/organizations` | Lists only the caller's organizations and roles. |
-| POST | `/organizations` | Any authenticated user; creates their `ADMIN` membership atomically. |
+| POST | `/organizations` | Any verified authenticated user; creates their `ADMIN` membership atomically. |
 | GET | `/organizations/:organizationId` | Current membership in that organization. |
 | PATCH | `/organizations/:organizationId` | Current `ADMIN` role; renames the organization only. |
 | GET | `/organizations/:organizationId/members` | Current `ADMIN` role; returns safe member profiles and roles. |
@@ -198,7 +256,8 @@ npm run dev:web
 ```
 
 Open `http://127.0.0.1:3000` to sign in or create an account, then create or select an
-organization. `http://127.0.0.1:3000/status` remains the system-status screen, with
+organization after verification. In development, use the verification message in
+`apps/api/.local/mail`. `http://127.0.0.1:3000/status` remains the system-status screen, with
 fresh server-side checks on refresh.
 
 The API runs at `http://127.0.0.1:3001`. `GET /api/health` returns
@@ -249,9 +308,12 @@ The `.db-spec.ts` tests are excluded from `npm test`. They verify Prisma mapping
 memberships across organizations, uniqueness, foreign keys, role sets, normalization,
 restricted deletes, real Argon2 verification, expiry, and logout revocation over HTTP.
 They also verify cross-tenant denial, admin-only actions, request-field spoofing,
-and live permission changes using the same session token.
-All fixture writes run inside transactions that roll back,
-including the Prisma success path. The tests neither reset nor truncate tables.
+and live permission changes using the same session token. Recovery coverage includes
+purpose binding, expiry, replay, generic responses, mail failures, session versioning,
+and concurrent token consumption. Most fixture writes run in rollback transactions;
+the concurrency test commits a uniquely identified temporary user and deletes it in
+`finally`. The tests neither reset nor truncate tables. Unit/database tests capture
+emails in memory instead of contacting SMTP.
 
 For the persistent browser workflow test, install Chromium once and run:
 
@@ -261,14 +323,16 @@ npm run test:e2e
 ```
 
 Playwright starts or reuses local servers on ports 3000 and 3001. Use a development
-or test database with migrations applied, never production. It verifies signup,
+or test database with migrations applied and `MAIL_TRANSPORT=file`, never production
+or external SMTP. It verifies signup, verification/resend, reset and replay rejection,
 login, logout, expiry, cookie privacy, cross-origin action rejection, organization
 creation/selection/renaming, and permission revocation. It checks desktop, tablet,
 and mobile widths, including long organization names, and saves ignored screenshots
 under `apps/web/test-results`. Browser fixture records are committed during the
 workflow, then removed in `afterAll` using unique run-specific names and ids; the
 cleanup refuses organizations with non-test members. It never resets or truncates
-the database. Browser tests are opt-in and separate from `npm test` and `test:db`.
+the database. It also deletes only outbox files matching its own test recipients.
+Browser tests are opt-in and separate from `npm test` and `test:db`.
 
 ESLint stays on 9.39.x for compatibility with the React plugin shipped by the current
 Next.js lint configuration. ESLint 10 currently fails with a removed `getFilename`
@@ -287,8 +351,9 @@ membership models now have a committed migration and database constraint tests.
 Backend registration, login, and revocable sessions are implemented. No inventory
 data is mocked or stored yet. Organization creation, scoped access, and admin guards
 are implemented and tested. Frontend signup, login, logout, organization selection,
-and the initial workspace are now connected to the real API. Email verification,
-password reset, invitations, and inventory features are still pending.
+and the initial workspace are connected to the real API. Email verification and
+password reset are implemented with local-file and configurable SMTP delivery.
+Invitations, inventory features, and production mail hardening are still pending.
 
 ## Commit Workflow
 
