@@ -55,6 +55,12 @@ test.afterAll(async () => {
     await database.query('DELETE FROM products WHERE organization_id = ANY($1::uuid[])', [
       ownedIds,
     ]);
+    await database.query('DELETE FROM suppliers WHERE organization_id = ANY($1::uuid[])', [
+      ownedIds,
+    ]);
+    await database.query('DELETE FROM locations WHERE organization_id = ANY($1::uuid[])', [
+      ownedIds,
+    ]);
     await database.query(
       'DELETE FROM memberships WHERE organization_id = ANY($1::uuid[]) AND user_id = ANY($2::uuid[])',
       [ownedIds, userIds],
@@ -255,6 +261,38 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await expect(page.locator('.badge.offline')).toContainText('Archived');
   await page.getByRole('button', { name: 'Restore USB-C_65W.01', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'No archived products' })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Suppliers', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'No suppliers yet', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'New supplier', exact: true }).click();
+  const supplierDialog = page.getByRole('dialog', { name: 'New supplier', exact: true });
+  await supplierDialog.getByLabel('Supplier name', { exact: true }).fill('Nile Electronics');
+  await supplierDialog.getByLabel('Email (optional)', { exact: true }).fill(' SALES@NILE.TEST ');
+  await supplierDialog.getByLabel('Phone (optional)', { exact: true }).fill('+251 11 555-0100');
+  await supplierDialog.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(supplierDialog).not.toBeVisible();
+  await expect(page.getByText('sales@nile.test', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'New supplier', exact: true }).click();
+  await supplierDialog.getByLabel('Supplier name', { exact: true }).fill('Nile Electronics');
+  await supplierDialog.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(supplierDialog.getByRole('alert')).toContainText(
+    'This supplier name is already used in this organization.',
+  );
+  await supplierDialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
+
+  await page.getByRole('link', { name: 'Locations', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'No locations yet', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'New location', exact: true }).click();
+  const locationDialog = page.getByRole('dialog', { name: 'New location', exact: true });
+  await locationDialog.getByLabel('Location name', { exact: true }).fill(' Main Warehouse ');
+  await locationDialog.getByLabel('Address (optional)', { exact: true }).fill('Industrial Zone 4');
+  await locationDialog.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(locationDialog).not.toBeVisible();
+  await expect(page.getByText('Main Warehouse', { exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Industrial Zone 4', exact: true })).toBeVisible();
+  await checkLayouts(page);
+  await page.screenshot({ path: testInfo.outputPath('locations-desktop.png'), fullPage: true });
+
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
 
@@ -277,7 +315,7 @@ test('account access, cookie privacy, organization selection, and revoked permis
   ]);
   const userId = account.rows[0].id;
   await database.query(
-    "UPDATE memberships SET roles = ARRAY['WAREHOUSE']::organization_role[] WHERE organization_id = $1 AND user_id = $2",
+    "UPDATE memberships SET roles = ARRAY['PURCHASER']::organization_role[] WHERE organization_id = $1 AND user_id = $2",
     [firstId, userId],
   );
   await page.reload();
@@ -287,6 +325,18 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await expect(page.getByText('USB-C_65W.01', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'New product', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Edit USB-C_65W.01', exact: true })).toHaveCount(0);
+  // A purchaser manages suppliers but not products or locations.
+  await page.getByRole('link', { name: 'Suppliers', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'New supplier', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Edit Nile Electronics', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('link', { name: 'Locations', exact: true }).click();
+  await expect(page.getByText('Main Warehouse', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'New location', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Edit Main Warehouse', exact: true })).toHaveCount(
+    0,
+  );
   await database.query('DELETE FROM memberships WHERE organization_id = $1 AND user_id = $2', [
     secondId,
     userId,

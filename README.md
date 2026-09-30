@@ -416,7 +416,9 @@ or external SMTP. It verifies signup, verification/resend, reset and replay reje
 login, logout, expiry, cookie privacy, cross-origin action rejection, organization
 creation/selection/renaming, permission revocation, and the product catalog:
 creation, duplicate-SKU errors, search, editing, archive/restore, and hidden manage
-controls for warehouse-only members. It checks desktop, tablet,
+controls for non-manager members. It also creates a supplier with normalized contact
+details, rejects a duplicate supplier name, creates a location, and verifies that a
+purchaser manages suppliers but not products or locations. It checks desktop, tablet,
 and mobile widths, including long organization names, and saves ignored screenshots
 under `apps/web/test-results`. Browser fixture records are committed during the
 workflow, then removed in `afterAll` using unique run-specific names and ids; the
@@ -445,9 +447,10 @@ and the initial workspace are connected to the real API. Email verification and
 password reset are implemented with local-file and configurable SMTP delivery.
 The Product schema and migration are implemented and tested, and the product API
 now provides listed, searchable, role-protected create/edit/archive/restore
-endpoints with a matching workspace catalog interface. Next are suppliers and
-locations. Invitations, stock workflows, and production mail hardening are still
-pending.
+endpoints with a matching workspace catalog interface. Suppliers and inventory
+locations complete milestone 3 with the same schema, API, and interface pattern.
+Next are purchase orders and approvals. Invitations, stock workflows, and
+production mail hardening are still pending.
 
 ## Commit Workflow
 

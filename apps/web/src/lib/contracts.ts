@@ -108,7 +108,77 @@ export const catalogQuerySchema = z.object({
   page: z.coerce.number().int().min(1).max(100000).optional(),
 });
 
+const optionalTrimmed = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max, `Use at most ${max} characters.`)
+    .transform((value) => value || null);
+
+export const supplierSchema = z.object({
+  id: z.uuid(),
+  name: z.string().min(1),
+  contactName: z.string().nullable(),
+  email: z.string().nullable(),
+  phone: z.string().nullable(),
+  address: z.string().nullable(),
+  archivedAt: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export const supplierListSchema = z.object({
+  items: z.array(supplierSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export const supplierInputSchema = z.object({
+  name: z.string().trim().min(1, 'Enter a supplier name.').max(160),
+  contactName: optionalTrimmed(120),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .max(254, 'Use at most 254 characters.')
+    .transform((value) => value || null)
+    .refine(
+      (value) => value === null || z.email().safeParse(value).success,
+      'Enter a valid email address.',
+    ),
+  phone: z
+    .string()
+    .trim()
+    .max(32, 'Use at most 32 characters.')
+    .transform((value) => value || null)
+    .refine(
+      (value) => value === null || /^(?=.*[0-9])[+0-9()./ -]{3,32}$/.test(value),
+      'Enter a phone number using digits and + ( ) . / - separators.',
+    ),
+  address: optionalTrimmed(500),
+});
+
+export const locationSchema = z.object({
+  id: z.uuid(),
+  name: z.string().min(1),
+  address: z.string().nullable(),
+  archivedAt: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export const locationListSchema = z.object({
+  items: z.array(locationSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export const locationInputSchema = z.object({
+  name: z.string().trim().min(1, 'Enter a location name.').max(120),
+  address: optionalTrimmed(500),
+});
+
 export type UserProfile = z.infer<typeof userSchema>;
+export type Supplier = z.infer<typeof supplierSchema>;
+export type InventoryLocation = z.infer<typeof locationSchema>;
 export type Product = z.infer<typeof productSchema>;
 export type ProductList = z.infer<typeof productListSchema>;
 export type ProductStatus = z.infer<typeof productStatusSchema>;

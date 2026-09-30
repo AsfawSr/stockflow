@@ -9,6 +9,8 @@ import {
   messageSchema,
   resetPasswordSchema,
   loginSchema,
+  locationInputSchema,
+  locationSchema,
   membershipSchema,
   organizationIdSchema,
   organizationInputSchema,
@@ -17,6 +19,8 @@ import {
   productSchema,
   sessionSchema,
   signupSchema,
+  supplierInputSchema,
+  supplierSchema,
   type FormState,
 } from '@/lib/contracts';
 import {
@@ -278,4 +282,88 @@ export async function setProductArchivedAction(
     };
   revalidatePath(`/workspace/${organizationId.data}/products`);
   return { success: archive ? 'Product archived.' : 'Product restored.' };
+}
+
+const entityConfig = {
+  supplier: {
+    path: 'suppliers',
+    schema: supplierSchema,
+    input: supplierInputSchema,
+    fields: ['name', 'contactName', 'email', 'phone', 'address'],
+    duplicate: 'This supplier name is already used in this organization.',
+  },
+  location: {
+    path: 'locations',
+    schema: locationSchema,
+    input: locationInputSchema,
+    fields: ['name', 'address'],
+    duplicate: 'This location name is already used in this organization.',
+  },
+} as const;
+
+async function saveEntity(kind: keyof typeof entityConfig, form: FormData): Promise<FormState> {
+  const setup = entityConfig[kind];
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  if (!organizationId.success) return { error: 'Choose a valid organization.' };
+  const rawId = form.get('entityId');
+  const entityId = rawId === null ? null : organizationIdSchema.safeParse(rawId);
+  if (entityId && !entityId.success) return { error: `This ${kind} is no longer available.` };
+  const values = Object.fromEntries(
+    setup.fields.map((field) => [field, String(form.get(field) ?? '')]),
+  );
+  const parsed = setup.input.safeParse(values);
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors, values };
+  const base = `/organizations/${organizationId.data}/${setup.path}`;
+  const result = await actionRequest(entityId ? `${base}/${entityId.data}` : base, setup.schema, {
+    method: entityId ? 'PATCH' : 'POST',
+    body: parsed.data,
+  });
+  if (!result.ok) return { error: result.status === 409 ? setup.duplicate : result.error, values };
+  revalidatePath(`/workspace/${organizationId.data}/${setup.path}`);
+  return { success: entityId ? 'Changes saved.' : 'Created.' };
+}
+
+async function toggleEntity(kind: keyof typeof entityConfig, form: FormData): Promise<FormState> {
+  const setup = entityConfig[kind];
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const entityId = organizationIdSchema.safeParse(form.get('entityId'));
+  const archive = form.get('archive') === 'true';
+  if (!organizationId.success || !entityId.success)
+    return { error: `This ${kind} is no longer available.` };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/${setup.path}/${entityId.data}/${archive ? 'archive' : 'restore'}`,
+    setup.schema,
+    { method: 'POST' },
+  );
+  if (!result.ok)
+    return {
+      error:
+        result.status === 409
+          ? `This ${kind} was already changed. Refresh and try again.`
+          : result.error,
+    };
+  revalidatePath(`/workspace/${organizationId.data}/${setup.path}`);
+  return { success: archive ? 'Archived.' : 'Restored.' };
+}
+
+export async function saveSupplierAction(_previous: FormState, form: FormData): Promise<FormState> {
+  return saveEntity('supplier', form);
+}
+
+export async function setSupplierArchivedAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  return toggleEntity('supplier', form);
+}
+
+export async function saveLocationAction(_previous: FormState, form: FormData): Promise<FormState> {
+  return saveEntity('location', form);
+}
+
+export async function setLocationArchivedAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  return toggleEntity('location', form);
 }

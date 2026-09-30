@@ -1,5 +1,13 @@
 import Link from 'next/link';
-import { Activity, Building2, LayoutDashboard, LogOut, Package } from 'lucide-react';
+import {
+  Activity,
+  Building2,
+  LayoutDashboard,
+  LogOut,
+  Package,
+  Truck,
+  Warehouse,
+} from 'lucide-react';
 import { logoutAction } from '@/app/actions';
 import type { Organization, UserProfile } from '@/lib/contracts';
 import { Brand } from './brand';
@@ -13,7 +21,7 @@ export function AppShell({
 }: {
   user?: UserProfile;
   organization?: Organization;
-  section: 'Organizations' | 'Overview' | 'Products' | 'System status';
+  section: 'Organizations' | 'Overview' | 'Products' | 'Suppliers' | 'Locations' | 'System status';
   children: React.ReactNode;
 }) {
   return (
@@ -62,6 +70,26 @@ export function AppShell({
             >
               <Package size={18} aria-hidden="true" />
               Products
+            </Link>
+          )}
+          {organization && (
+            <Link
+              className="nav-item"
+              href={`/workspace/${organization.id}/suppliers`}
+              aria-current={section === 'Suppliers' ? 'page' : undefined}
+            >
+              <Truck size={18} aria-hidden="true" />
+              Suppliers
+            </Link>
+          )}
+          {organization && (
+            <Link
+              className="nav-item"
+              href={`/workspace/${organization.id}/locations`}
+              aria-current={section === 'Locations' ? 'page' : undefined}
+            >
+              <Warehouse size={18} aria-hidden="true" />
+              Locations
             </Link>
           )}
           <Link
