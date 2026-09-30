@@ -176,6 +176,124 @@ export const locationInputSchema = z.object({
   address: optionalTrimmed(500),
 });
 
+export const purchaseOrderStatusSchema = z.enum([
+  'DRAFT',
+  'SUBMITTED',
+  'APPROVED',
+  'REJECTED',
+  'PARTIALLY_RECEIVED',
+  'RECEIVED',
+  'CANCELLED',
+]);
+const moneySchema = z.string().regex(/^\d+\.\d{2}$/);
+const orderPartySchema = z.object({ id: z.uuid(), name: z.string().min(1) });
+const orderUserSchema = z.object({ id: z.uuid(), displayName: z.string().min(1) });
+const orderProductSchema = z.object({
+  id: z.uuid(),
+  sku: z.string().min(1),
+  name: z.string().min(1),
+  unit: z.string().min(1),
+});
+export const orderLineSchema = z.object({
+  id: z.uuid(),
+  product: orderProductSchema,
+  quantity: z.number().int().positive(),
+  unitPrice: moneySchema,
+  receivedQuantity: z.number().int().nonnegative(),
+  remainingQuantity: z.number().int().nonnegative(),
+  lineTotal: moneySchema,
+});
+export const purchaseOrderSchema = z.object({
+  id: z.uuid(),
+  number: z.number().int().positive(),
+  reference: z.string().min(1),
+  status: purchaseOrderStatusSchema,
+  note: z.string().nullable(),
+  supplier: orderPartySchema,
+  location: orderPartySchema,
+  createdBy: orderUserSchema,
+  decidedBy: orderUserSchema.nullable(),
+  decisionNote: z.string().nullable(),
+  decidedAt: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+  total: moneySchema,
+  lines: z.array(orderLineSchema),
+  receipts: z.array(
+    z.object({
+      id: z.uuid(),
+      note: z.string().nullable(),
+      receivedBy: orderUserSchema,
+      createdAt: z.iso.datetime(),
+      lines: z.array(
+        z.object({
+          id: z.uuid(),
+          purchaseOrderLineId: z.uuid(),
+          product: orderProductSchema,
+          quantity: z.number().int().positive(),
+        }),
+      ),
+    }),
+  ),
+});
+export const purchaseOrderListSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.uuid(),
+      number: z.number().int().positive(),
+      reference: z.string().min(1),
+      status: purchaseOrderStatusSchema,
+      supplier: orderPartySchema,
+      location: orderPartySchema,
+      lineCount: z.number().int().nonnegative(),
+      total: moneySchema,
+      createdAt: z.iso.datetime(),
+      updatedAt: z.iso.datetime(),
+    }),
+  ),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export const createOrderInputSchema = z.object({
+  supplierId: z.uuid('Choose a supplier.'),
+  locationId: z.uuid('Choose a destination location.'),
+  note: optionalTrimmed(1000),
+});
+export const orderLineInputSchema = z.object({
+  productId: z.uuid('Choose a product.'),
+  quantity: z.coerce.number().int('Enter a whole number.').min(1, 'Enter a quantity.').max(1000000),
+  unitPrice: z
+    .string()
+    .trim()
+    .regex(/^\d{1,10}(\.\d{1,2})?$/, 'Enter a price such as 25 or 25.50.'),
+});
+export const rejectInputSchema = z.object({
+  note: z.string().trim().min(1, 'Explain why the order is rejected.').max(1000),
+});
+
+export type PurchaseOrder = z.infer<typeof purchaseOrderSchema>;
+export type PurchaseOrderStatus = z.infer<typeof purchaseOrderStatusSchema>;
+
+export const orderStatusLabels: Record<PurchaseOrderStatus, string> = {
+  DRAFT: 'Draft',
+  SUBMITTED: 'Awaiting approval',
+  APPROVED: 'Approved',
+  REJECTED: 'Rejected',
+  PARTIALLY_RECEIVED: 'Partially received',
+  RECEIVED: 'Received',
+  CANCELLED: 'Cancelled',
+};
+export const orderStatusTone: Record<PurchaseOrderStatus, 'online' | 'offline' | 'pending'> = {
+  DRAFT: 'pending',
+  SUBMITTED: 'pending',
+  APPROVED: 'online',
+  REJECTED: 'offline',
+  PARTIALLY_RECEIVED: 'pending',
+  RECEIVED: 'online',
+  CANCELLED: 'offline',
+};
+
 export type UserProfile = z.infer<typeof userSchema>;
 export type Supplier = z.infer<typeof supplierSchema>;
 export type InventoryLocation = z.infer<typeof locationSchema>;

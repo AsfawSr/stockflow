@@ -477,7 +477,10 @@ creation/selection/renaming, permission revocation, and the product catalog:
 creation, duplicate-SKU errors, search, editing, archive/restore, and hidden manage
 controls for non-manager members. It also creates a supplier with normalized contact
 details, rejects a duplicate supplier name, creates a location, and verifies that a
-purchaser manages suppliers but not products or locations. It checks desktop, tablet,
+purchaser manages suppliers but not products or locations. It then runs a purchase
+order from draft through line editing, submission, approval, and two partial
+deliveries to `RECEIVED`, checking the stock level in PostgreSQL afterwards.
+It checks desktop, tablet,
 and mobile widths, including long organization names, and saves ignored screenshots
 under `apps/web/test-results`. Browser fixture records are committed during the
 workflow, then removed in `afterAll` using unique run-specific names and ids; the
@@ -508,8 +511,11 @@ The Product schema and migration are implemented and tested, and the product API
 now provides listed, searchable, role-protected create/edit/archive/restore
 endpoints with a matching workspace catalog interface. Suppliers and inventory
 locations complete milestone 3 with the same schema, API, and interface pattern.
-Next are purchase orders and approvals. Invitations, stock workflows, and
-production mail hardening are still pending.
+Milestone 4 adds the purchase order workflow end to end: draft, approval,
+rejection, cancellation, and partial receipts that post to the stock ledger and
+per-location stock levels, all covered by constraint, workflow, concurrency, and
+browser tests. Next are stock transfers, adjustments, and reports. Invitations
+and production mail hardening are still pending.
 
 ## Commit Workflow
 

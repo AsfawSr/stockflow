@@ -1380,6 +1380,73 @@ dd {
   color: var(--muted);
   font-size: 12px;
 }
+.badge.pending {
+  color: #8a6d1d;
+}
+.order-link {
+  font-weight: 500;
+  font-size: 13px;
+}
+.order-heading {
+  margin-top: 22px;
+}
+.order-actions {
+  min-width: 0;
+  justify-content: flex-start;
+}
+.order-details {
+  max-width: 620px;
+}
+.add-line-form {
+  margin-top: 22px;
+}
+.add-line-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+}
+.add-line-submit {
+  margin-bottom: 1px;
+}
+.receipt-form {
+  max-width: 540px;
+}
+.receipt-line label small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-weight: 400;
+}
+.receipt-form > .primary-button {
+  align-self: flex-start;
+}
+.receipt-history {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.receipt-entry {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  font-size: 13px;
+}
+.receipt-entry strong {
+  font-weight: 500;
+}
+.receipt-entry ul {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  color: var(--muted);
+  line-height: 1.8;
+}
+@media (max-width: 900px) {
+  .add-line-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
 @media (max-width: 600px) {
   .catalog-toolbar {
     flex-direction: column;

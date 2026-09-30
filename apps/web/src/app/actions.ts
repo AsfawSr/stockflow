@@ -17,6 +17,10 @@ import {
   organizationSchema,
   productInputSchema,
   productSchema,
+  createOrderInputSchema,
+  orderLineInputSchema,
+  purchaseOrderSchema,
+  rejectInputSchema,
   sessionSchema,
   signupSchema,
   supplierInputSchema,
@@ -366,4 +370,180 @@ export async function setLocationArchivedAction(
   form: FormData,
 ): Promise<FormState> {
   return toggleEntity('location', form);
+}
+
+export async function createPurchaseOrderAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  if (!organizationId.success) return { error: 'Choose a valid organization.' };
+  const values = {
+    supplierId: String(form.get('supplierId') ?? ''),
+    locationId: String(form.get('locationId') ?? ''),
+    note: String(form.get('note') ?? ''),
+  };
+  const parsed = createOrderInputSchema.safeParse(values);
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors, values };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/purchase-orders`,
+    purchaseOrderSchema,
+    { method: 'POST', body: parsed.data },
+  );
+  if (!result.ok)
+    return {
+      error:
+        result.status === 409
+          ? 'The chosen supplier or location is archived. Refresh and choose active ones.'
+          : result.error,
+      values,
+    };
+  revalidatePath(`/workspace/${organizationId.data}/purchase-orders`);
+  redirect(`/workspace/${organizationId.data}/purchase-orders/${result.data.id}`);
+}
+
+function orderPaths(organizationId: string, orderId: string) {
+  return [
+    `/workspace/${organizationId}/purchase-orders`,
+    `/workspace/${organizationId}/purchase-orders/${orderId}`,
+  ];
+}
+
+export async function addOrderLineAction(_previous: FormState, form: FormData): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const orderId = organizationIdSchema.safeParse(form.get('orderId'));
+  if (!organizationId.success || !orderId.success)
+    return { error: 'This order is no longer available.' };
+  const values = {
+    productId: String(form.get('productId') ?? ''),
+    quantity: String(form.get('quantity') ?? ''),
+    unitPrice: String(form.get('unitPrice') ?? ''),
+  };
+  const parsed = orderLineInputSchema.safeParse(values);
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors, values };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/purchase-orders/${orderId.data}/lines`,
+    purchaseOrderSchema,
+    { method: 'POST', body: parsed.data },
+  );
+  if (!result.ok)
+    return {
+      error:
+        result.status === 409
+          ? 'The product is already on the order, is archived, or the order is no longer a draft.'
+          : result.error,
+      values,
+    };
+  for (const path of orderPaths(organizationId.data, orderId.data)) revalidatePath(path);
+  return { success: 'Line added.' };
+}
+
+export async function removeOrderLineAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const orderId = organizationIdSchema.safeParse(form.get('orderId'));
+  const lineId = organizationIdSchema.safeParse(form.get('lineId'));
+  if (!organizationId.success || !orderId.success || !lineId.success)
+    return { error: 'This order line is no longer available.' };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/purchase-orders/${orderId.data}/lines/${lineId.data}`,
+    purchaseOrderSchema,
+    { method: 'DELETE' },
+  );
+  if (!result.ok)
+    return {
+      error: result.status === 409 ? 'Lines can only be changed on draft orders.' : result.error,
+    };
+  for (const path of orderPaths(organizationId.data, orderId.data)) revalidatePath(path);
+  return { success: 'Line removed.' };
+}
+
+const orderTransitions = {
+  submit: 'Order submitted for approval.',
+  approve: 'Order approved.',
+  cancel: 'Order cancelled.',
+} as const;
+
+export async function transitionOrderAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const orderId = organizationIdSchema.safeParse(form.get('orderId'));
+  const transition = String(form.get('transition') ?? '') as keyof typeof orderTransitions;
+  if (!organizationId.success || !orderId.success || !(transition in orderTransitions))
+    return { error: 'This order is no longer available.' };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/purchase-orders/${orderId.data}/${transition}`,
+    purchaseOrderSchema,
+    { method: 'POST', body: {} },
+  );
+  if (!result.ok)
+    return {
+      error:
+        result.status === 409
+          ? 'This order changed state. Refresh the page and try again.'
+          : result.error,
+    };
+  for (const path of orderPaths(organizationId.data, orderId.data)) revalidatePath(path);
+  return { success: orderTransitions[transition] };
+}
+
+export async function rejectOrderAction(_previous: FormState, form: FormData): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const orderId = organizationIdSchema.safeParse(form.get('orderId'));
+  if (!organizationId.success || !orderId.success)
+    return { error: 'This order is no longer available.' };
+  const parsed = rejectInputSchema.safeParse({ note: form.get('note') });
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/purchase-orders/${orderId.data}/reject`,
+    purchaseOrderSchema,
+    { method: 'POST', body: parsed.data },
+  );
+  if (!result.ok)
+    return {
+      error:
+        result.status === 409
+          ? 'This order changed state. Refresh the page and try again.'
+          : result.error,
+    };
+  for (const path of orderPaths(organizationId.data, orderId.data)) revalidatePath(path);
+  return { success: 'Order rejected.' };
+}
+
+export async function receiveOrderAction(_previous: FormState, form: FormData): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const orderId = organizationIdSchema.safeParse(form.get('orderId'));
+  if (!organizationId.success || !orderId.success)
+    return { error: 'This order is no longer available.' };
+  const lines: { purchaseOrderLineId: string; quantity: number }[] = [];
+  for (const [key, raw] of form.entries()) {
+    if (!key.startsWith('quantity-')) continue;
+    const lineId = organizationIdSchema.safeParse(key.slice('quantity-'.length));
+    const value = String(raw).trim();
+    if (!lineId.success || value === '') continue;
+    const quantity = Number(value);
+    if (!Number.isInteger(quantity) || quantity < 0)
+      return { error: 'Quantities must be whole numbers.' };
+    if (quantity > 0) lines.push({ purchaseOrderLineId: lineId.data, quantity });
+  }
+  if (lines.length === 0) return { error: 'Enter at least one received quantity.' };
+  const note = String(form.get('note') ?? '').trim();
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/purchase-orders/${orderId.data}/receipts`,
+    purchaseOrderSchema,
+    { method: 'POST', body: { note: note || null, lines } },
+  );
+  if (!result.ok)
+    return {
+      error:
+        result.status === 409
+          ? 'The receipt no longer matches the remaining quantities. Refresh and try again.'
+          : result.error,
+    };
+  for (const path of orderPaths(organizationId.data, orderId.data)) revalidatePath(path);
+  return { success: 'Delivery recorded.' };
 }

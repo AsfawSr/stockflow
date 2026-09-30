@@ -16,7 +16,7 @@ function errorMessage(status: number): string {
 export async function apiRequest<Data>(
   path: string,
   schema: z.ZodType<Data>,
-  options: { method?: 'GET' | 'POST' | 'PATCH'; token?: string; body?: unknown } = {},
+  options: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; token?: string; body?: unknown } = {},
 ): Promise<ApiResult<Data>> {
   try {
     const base = process.env.API_BASE_URL ?? 'http://127.0.0.1:3001';

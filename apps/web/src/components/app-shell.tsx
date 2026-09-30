@@ -2,6 +2,7 @@ import Link from 'next/link';
 import {
   Activity,
   Building2,
+  ClipboardList,
   LayoutDashboard,
   LogOut,
   Package,
@@ -21,7 +22,14 @@ export function AppShell({
 }: {
   user?: UserProfile;
   organization?: Organization;
-  section: 'Organizations' | 'Overview' | 'Products' | 'Suppliers' | 'Locations' | 'System status';
+  section:
+    | 'Organizations'
+    | 'Overview'
+    | 'Products'
+    | 'Suppliers'
+    | 'Locations'
+    | 'Purchase orders'
+    | 'System status';
   children: React.ReactNode;
 }) {
   return (
@@ -90,6 +98,16 @@ export function AppShell({
             >
               <Warehouse size={18} aria-hidden="true" />
               Locations
+            </Link>
+          )}
+          {organization && (
+            <Link
+              className="nav-item"
+              href={`/workspace/${organization.id}/purchase-orders`}
+              aria-current={section === 'Purchase orders' ? 'page' : undefined}
+            >
+              <ClipboardList size={18} aria-hidden="true" />
+              Purchase orders
             </Link>
           )}
           <Link

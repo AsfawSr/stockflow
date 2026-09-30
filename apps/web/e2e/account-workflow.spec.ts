@@ -52,6 +52,26 @@ test.afterAll(async () => {
     );
     if (foreign.rows[0].count)
       throw new Error('Refusing to clean test organizations with non-test members.');
+    await database.query('DELETE FROM stock_movements WHERE organization_id = ANY($1::uuid[])', [
+      ownedIds,
+    ]);
+    await database.query('DELETE FROM stock_levels WHERE organization_id = ANY($1::uuid[])', [
+      ownedIds,
+    ]);
+    await database.query(
+      'DELETE FROM goods_receipt_lines WHERE goods_receipt_id IN (SELECT id FROM goods_receipts WHERE organization_id = ANY($1::uuid[]))',
+      [ownedIds],
+    );
+    await database.query('DELETE FROM goods_receipts WHERE organization_id = ANY($1::uuid[])', [
+      ownedIds,
+    ]);
+    await database.query(
+      'DELETE FROM purchase_order_lines WHERE organization_id = ANY($1::uuid[])',
+      [ownedIds],
+    );
+    await database.query('DELETE FROM purchase_orders WHERE organization_id = ANY($1::uuid[])', [
+      ownedIds,
+    ]);
     await database.query('DELETE FROM products WHERE organization_id = ANY($1::uuid[])', [
       ownedIds,
     ]);
@@ -292,6 +312,58 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await expect(page.getByRole('cell', { name: 'Industrial Zone 4', exact: true })).toBeVisible();
   await checkLayouts(page);
   await page.screenshot({ path: testInfo.outputPath('locations-desktop.png'), fullPage: true });
+
+  await page.getByRole('link', { name: 'Purchase orders', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'No purchase orders yet', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'New order', exact: true }).click();
+  const orderDialog = page.getByRole('dialog', { name: 'New purchase order', exact: true });
+  await orderDialog
+    .getByLabel('Supplier', { exact: true })
+    .selectOption({ label: 'Nile Electronics' });
+  await orderDialog
+    .getByLabel('Deliver to', { exact: true })
+    .selectOption({ label: 'Main Warehouse' });
+  await orderDialog.getByLabel('Note (optional)', { exact: true }).fill('Urgent restock');
+  await orderDialog.getByRole('button', { name: 'Create draft', exact: true }).click();
+  await expect(page).toHaveURL(/\/purchase-orders\/[a-f0-9-]+$/);
+  await expect(page.getByRole('heading', { name: 'PO-0001', exact: true })).toBeVisible();
+  await expect(page.getByText('Draft', { exact: true })).toBeVisible();
+
+  await page
+    .getByLabel('Product', { exact: true })
+    .selectOption({ label: 'USB-C_65W.01 · USB-C Charger 65W' });
+  await page.getByLabel('Quantity', { exact: true }).fill('10');
+  await page.getByLabel('Unit price', { exact: true }).fill('25.50');
+  await page.getByRole('button', { name: 'Add line', exact: true }).click();
+  await expect(page.getByRole('cell', { name: '255.00', exact: true })).toBeVisible();
+  await checkLayouts(page);
+  await page.screenshot({ path: testInfo.outputPath('order-draft-desktop.png'), fullPage: true });
+
+  await page.getByRole('button', { name: 'Submit for approval', exact: true }).click();
+  await expect(page.getByText('Awaiting approval', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Approve', exact: true }).click();
+  await expect(page.getByText('Approved', { exact: true })).toBeVisible();
+
+  await page.getByLabel(/USB-C_65W\.01/).fill('6');
+  await page.getByRole('button', { name: 'Record delivery', exact: true }).click();
+  await expect(page.getByText('Partially received', { exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: '6 of 10', exact: true })).toBeVisible();
+  await expect(page.getByText('4 of 10 piece remaining', { exact: true })).toBeVisible();
+  await page.getByLabel(/USB-C_65W\.01/).fill('4');
+  await page.getByRole('button', { name: 'Record delivery', exact: true }).click();
+  await expect(page.getByText('Received', { exact: true })).toBeVisible();
+  await expect(page.getByText('2 receipts', { exact: true })).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath('order-received-desktop.png'),
+    fullPage: true,
+  });
+  const stock = await database.query<{ quantity: number }>(
+    'SELECT quantity FROM stock_levels WHERE organization_id = $1',
+    [firstId],
+  );
+  expect(stock.rows).toEqual([{ quantity: 10 }]);
 
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
