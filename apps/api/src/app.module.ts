@@ -14,6 +14,7 @@ import { LocationsModule } from './locations/locations.module';
 import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
 import { StockModule } from './stock/stock.module';
 import { InvitationsModule } from './invitations/invitations.module';
+import { MaintenanceModule } from './maintenance/maintenance.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { InvitationsModule } from './invitations/invitations.module';
     PurchaseOrdersModule,
     StockModule,
     InvitationsModule,
+    MaintenanceModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 120 }]),
   ],
   controllers: [HealthController, ReadinessController],
