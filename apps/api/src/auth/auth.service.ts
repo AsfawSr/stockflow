@@ -1,8 +1,13 @@
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { LoginDto, RegisterDto } from './auth.dto';
+import { ChangePasswordDto, LoginDto, RegisterDto } from './auth.dto';
 import { PasswordService } from './password.service';
 import { AccountService } from './account.service';
 
@@ -112,6 +117,43 @@ export class AuthService {
     }
     const { authVersion: _version, ...user } = session.user;
     return { sessionId: session.id, user };
+  }
+
+  async changePassword(principal: AuthPrincipal, input: ChangePasswordDto): Promise<void> {
+    const account = await this.prisma.user.findUnique({
+      where: { id: principal.user.id },
+      select: { authVersion: true, credential: { select: { passwordHash: true } } },
+    });
+    const valid = await this.passwords.matches(
+      input.currentPassword,
+      account?.credential?.passwordHash,
+    );
+    if (!account?.credential || !valid)
+      throw new BadRequestException('Your current password is incorrect.');
+    const passwordHash = await this.passwords.hash(input.newPassword);
+    const stale = () => new UnauthorizedException('Authentication required.');
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${principal.user.id}::uuid FOR UPDATE`;
+      const updated = await tx.user.updateMany({
+        where: { id: principal.user.id, authVersion: account.authVersion },
+        data: { authVersion: { increment: 1 } },
+      });
+      if (updated.count !== 1) throw stale();
+      await tx.passwordCredential.update({
+        where: { userId: principal.user.id },
+        data: { passwordHash },
+      });
+      // Only the session that proved the current password survives the version bump.
+      await tx.session.deleteMany({
+        where: { userId: principal.user.id, id: { not: principal.sessionId } },
+      });
+      const kept = await tx.session.updateMany({
+        where: { id: principal.sessionId, userId: principal.user.id },
+        data: { authVersion: account.authVersion + 1 },
+      });
+      if (kept.count !== 1) throw stale();
+      await tx.accountToken.deleteMany({ where: { userId: principal.user.id } });
+    });
   }
 
   async logout(principal: AuthPrincipal): Promise<void> {

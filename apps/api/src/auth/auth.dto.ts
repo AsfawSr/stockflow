@@ -30,6 +30,18 @@ export class ResetPasswordDto extends AccountTokenDto {
   password!: string;
 }
 
+export class ChangePasswordDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  currentPassword!: string;
+
+  @IsString()
+  @MinLength(12)
+  @MaxLength(128)
+  newPassword!: string;
+}
+
 export class RegisterDto extends LoginDto {
   @MinLength(12)
   declare password: string;

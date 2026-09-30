@@ -9,7 +9,14 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { AccountTokenDto, EmailDto, LoginDto, RegisterDto, ResetPasswordDto } from './auth.dto';
+import {
+  AccountTokenDto,
+  ChangePasswordDto,
+  EmailDto,
+  LoginDto,
+  RegisterDto,
+  ResetPasswordDto,
+} from './auth.dto';
 import { Public } from './auth.guard';
 import type { AuthenticatedRequest } from './auth.guard';
 import { AuthService } from './auth.service';
@@ -77,6 +84,15 @@ export class AuthController {
   @Header('Cache-Control', 'no-store')
   login(@Body() input: LoginDto) {
     return this.auth.login(input);
+  }
+
+  @Post('password/change')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Header('Cache-Control', 'no-store')
+  async changePassword(@Req() request: AuthenticatedRequest, @Body() input: ChangePasswordDto) {
+    await this.auth.changePassword(request.principal, input);
+    return { message: 'Password updated.' };
   }
 
   @Get('me')
