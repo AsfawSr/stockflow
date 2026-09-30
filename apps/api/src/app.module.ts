@@ -12,6 +12,7 @@ import { ProductsModule } from './products/products.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { LocationsModule } from './locations/locations.module';
 import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
+import { StockModule } from './stock/stock.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
     SuppliersModule,
     LocationsModule,
     PurchaseOrdersModule,
+    StockModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 120 }]),
   ],
   controllers: [HealthController, ReadinessController],
