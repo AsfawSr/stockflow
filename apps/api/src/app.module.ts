@@ -9,6 +9,8 @@ import { ReadinessController } from './health/readiness.controller';
 import { PrismaModule } from './prisma/prisma.module';
 import { OrganizationsModule } from './organizations/organizations.module';
 import { ProductsModule } from './products/products.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
+import { LocationsModule } from './locations/locations.module';
 
 @Module({
   imports: [
@@ -17,6 +19,8 @@ import { ProductsModule } from './products/products.module';
     AuthModule,
     OrganizationsModule,
     ProductsModule,
+    SuppliersModule,
+    LocationsModule,
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 120 }]),
   ],
   controllers: [HealthController, ReadinessController],

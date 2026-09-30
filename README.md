@@ -144,6 +144,23 @@ malformed UUIDs, and other organizations' product ids return 404. Client-supplie
 The API tests cover role denial, cross-tenant 404s, duplicate SKU conflicts across
 create and update, filtering, and pagination against real PostgreSQL.
 
+## Supplier and Location APIs
+
+`/organizations/:organizationId/suppliers` and `.../locations` mirror the product
+API: verified email plus current membership required, nonmembers receive 404,
+listing supports the same `search`, `status`, `page`, and `pageSize` parameters,
+and archive/restore behave identically with 409 on repeated changes. Duplicate
+names return 409 with an entity-specific message.
+
+Suppliers accept `name` plus optional `contactName`, `email`, `phone`, and
+`address`; emails are lowercased, optional fields are trimmed with blank values
+stored as null, and search matches names and emails. Any member reads suppliers;
+`ADMIN` or `PURCHASER` roles manage them. Locations accept `name` and optional
+`address`, search by name, and are readable by members but managed by `ADMIN`
+only, matching the role model where administrators manage company settings and
+purchasing officers manage supplier relationships. `MANAGER` manages products
+but neither suppliers nor locations.
+
 
 ## Authentication API
 
