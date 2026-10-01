@@ -389,7 +389,9 @@ launch, add a durable mail queue, retry/monitoring, and appropriate abuse contro
 	Admins can rename the organization and inspect its members; other members cannot.
 	Admins also invite members by email with a role set, see pending invitations with
 	their expiry, and revoke them; `/invitations/accept` lets a signed-in, verified
-	user consume an emailed invitation link and join with the invited roles.- `/workspace/:organizationId/products` lists the organization's catalog with search,
+	user consume an emailed invitation link and join with the invited roles. Admins
+	edit each member's roles through a checkbox dialog and remove members; demoting
+	or removing the only administrator shows a clear error from the API guard.- `/workspace/:organizationId/products` lists the organization's catalog with search,
   an active/archived/all filter, and pagination. Admins and managers create, edit,
   archive, and restore products through dialogs; other members see a read-only list.
   Search, filter, and paging run server-side through GET parameters, so catalog URLs
@@ -438,6 +440,8 @@ using its URL id; arbitrary headers cannot change the authorization scope.
 | GET | `/organizations/:organizationId` | Current membership in that organization. |
 | PATCH | `/organizations/:organizationId` | Current `ADMIN` role; renames the organization only. |
 | GET | `/organizations/:organizationId/members` | Current `ADMIN` role; returns safe member profiles and roles. |
+| PATCH | `/organizations/:organizationId/members/:memberUserId` | Current `ADMIN` role; replaces a member's role set. |
+| DELETE | `/organizations/:organizationId/members/:memberUserId` | Current `ADMIN` role; removes the membership. |
 
 Create accepts only `name` and `currency`; rename accepts only `name`. Clients cannot
 assign themselves roles, provide an owner id, or change currency through rename.
@@ -452,9 +456,11 @@ for an existing member returns 403. Missing, expired, or revoked authentication
 returns 401. Organization reads and writes also include membership conditions in
 their database queries, including the admin requirement on updates and member lists.
 
-The creator is the initial admin. Invitations, adding/removing members, role-change
-APIs, and last-admin protection are not exposed yet; tests change membership records
-directly to verify authorization behavior. There is no global administrator role.
+The creator is the initial admin. Admins manage membership end to end: email
+invitations, role edits, and removal. Role changes and removals lock the
+organization row, count remaining administrators, and refuse to demote or remove
+the last one, including under concurrent requests; changes take effect on the
+member's next request without logout. There is no global administrator role.
 Future inventory and purchasing endpoints must apply these guards and scope every
 query by the authenticated membership; the current guards do not automatically
 secure arbitrary future queries, exports, or background jobs. PostgreSQL row-level
@@ -562,7 +568,10 @@ transfer or adjustment controls. It also invites an address before its account
 exists, revokes and re-issues the invitation, and later has the invited user
 accept through the emailed link, land in the workspace with the invited role,
 and get a clear error on link reuse. It sets a reorder point on the product and
-verifies the Low badge and the low-stock filter on the stock screen.
+verifies the Low badge and the low-stock filter on the stock screen. It verifies
+that the only administrator can be neither demoted nor removed, changes the
+account password from the account screen, confirms the old password stops
+working, and signs back in with the new one.
 It checks desktop, tablet,
 and mobile widths, including long organization names, and saves ignored screenshots
 under `apps/web/test-results`. Browser fixture records are committed during the

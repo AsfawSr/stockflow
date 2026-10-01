@@ -173,11 +173,27 @@ async function checkLayouts(page: Page) {
     await page.setViewportSize(viewport);
     const layout = await page.evaluate(async () => {
       await document.fonts.ready;
-      return { width: window.innerWidth, content: document.documentElement.scrollWidth };
+      const wide: string[] = [];
+      if (document.documentElement.scrollWidth > window.innerWidth) {
+        for (const element of document.querySelectorAll('body *')) {
+          const box = element.getBoundingClientRect();
+          if (box.right > window.innerWidth && box.width > 0) {
+            const tag = element.tagName.toLowerCase();
+            const names = (element.className && String(element.className)) || '';
+            wide.push(`${tag}.${names.split(' ')[0]} right=${Math.round(box.right)}`);
+          }
+        }
+      }
+      return {
+        width: window.innerWidth,
+        content: document.documentElement.scrollWidth,
+        wide: wide.slice(0, 12),
+      };
     });
-    expect(layout.content, `Horizontal overflow at ${viewport.width}px`).toBeLessThanOrEqual(
-      layout.width,
-    );
+    expect(
+      layout.content,
+      `Horizontal overflow at ${viewport.width}px: ${layout.wide.join(', ')}`,
+    ).toBeLessThanOrEqual(layout.width);
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
 }
@@ -496,6 +512,26 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await inviteDialog.getByRole('button', { name: 'Send invitation', exact: true }).click();
   await expect(inviteDialog).not.toBeVisible();
   await expect(page.getByRole('cell', { name: emails[1], exact: true })).toBeVisible();
+
+  // The only administrator can be neither demoted nor removed.
+  await page.getByRole('button', { name: `Edit roles for ${emails[0]}`, exact: true }).click();
+  const rolesDialog = page.getByRole('dialog', {
+    name: `Edit roles for ${emails[0]}`,
+    exact: true,
+  });
+  await rolesDialog.getByLabel('Administrator', { exact: true }).uncheck();
+  await rolesDialog.getByLabel('Purchasing', { exact: true }).check();
+  await rolesDialog.getByRole('button', { name: 'Save roles', exact: true }).click();
+  await expect(rolesDialog.getByRole('alert')).toContainText(
+    'An organization needs at least one administrator.',
+  );
+  await rolesDialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await page.getByRole('button', { name: `Remove ${emails[0]}`, exact: true }).click();
+  await expect(
+    page
+      .locator('.row-action-form')
+      .getByText('An organization needs at least one administrator.', { exact: true }),
+  ).toBeVisible();
 
   await page.getByRole('link', { name: 'Switch organization', exact: true }).click();
   const secondId = await createOrganization(page, longName, 'USD');

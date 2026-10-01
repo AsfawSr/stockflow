@@ -42,13 +42,15 @@ export const inviteInputSchema = z.object({
     .pipe(z.email({ error: 'Enter a valid email address.' })),
   roles: z.array(roleSchema).min(1, 'Choose at least one role.'),
 });
-export const membersSchema = z.array(
-  z.object({
-    user: userSchema.omit({ emailVerifiedAt: true }),
-    roles: z.array(roleSchema).min(1),
-    createdAt: z.iso.datetime(),
-  }),
-);
+export const memberSchema = z.object({
+  user: userSchema.omit({ emailVerifiedAt: true }),
+  roles: z.array(roleSchema).min(1),
+  createdAt: z.iso.datetime(),
+});
+export const membersSchema = z.array(memberSchema);
+export const memberRolesInputSchema = z.object({
+  roles: z.array(roleSchema).min(1, 'Choose at least one role.'),
+});
 export const emptySchema = z.null();
 export const messageSchema = z.object({ message: z.string() });
 export const accountTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);

@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { invitationSchema, invitationsSchema, inviteInputSchema } from '../src/lib/contracts';
+import {
+  invitationSchema,
+  invitationsSchema,
+  inviteInputSchema,
+  memberRolesInputSchema,
+  memberSchema,
+} from '../src/lib/contracts';
 
 const uuid = '8ed13b94-fd8b-4079-848e-f22edaa8ce05';
 
@@ -36,4 +42,19 @@ test('validates invitation list responses', () => {
     invitationSchema.safeParse({ ...invitation, invitedBy: { id: uuid, displayName: '' } }).success,
     false,
   );
+});
+
+test('validates member responses and role updates', () => {
+  const member = {
+    user: { id: uuid, email: 'colleague@example.test', displayName: 'Colleague' },
+    roles: ['MANAGER'],
+    createdAt: new Date().toISOString(),
+  };
+  assert.equal(memberSchema.safeParse(member).success, true);
+  assert.equal(memberSchema.safeParse({ ...member, roles: [] }).success, false);
+  assert.deepEqual(memberRolesInputSchema.parse({ roles: ['ADMIN', 'WAREHOUSE'] }), {
+    roles: ['ADMIN', 'WAREHOUSE'],
+  });
+  assert.equal(memberRolesInputSchema.safeParse({ roles: [] }).success, false);
+  assert.equal(memberRolesInputSchema.safeParse({ roles: ['OWNER'] }).success, false);
 });

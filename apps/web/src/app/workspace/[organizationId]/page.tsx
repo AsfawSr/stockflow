@@ -2,6 +2,7 @@ import { ArrowLeftRight, Building2, CalendarDays, Coins } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/components/app-shell';
 import { InviteMemberButton, RevokeInvitationButton } from '@/components/invitation-forms';
+import { MemberRolesButton, RemoveMemberButton } from '@/components/member-forms';
 import { RenameOrganizationForm } from '@/components/organization-forms';
 import { invitationsSchema, membersSchema, roleLabels } from '@/lib/contracts';
 import { authenticatedRequest, requireOrganization, requireUser } from '@/lib/session';
@@ -96,6 +97,9 @@ export default async function WorkspacePage({
                     <th scope="col">MEMBER</th>
                     <th scope="col">ROLES</th>
                     <th scope="col">JOINED</th>
+                    <th scope="col">
+                      <span className="visually-hidden">Actions</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -117,6 +121,21 @@ export default async function WorkspacePage({
                         </div>
                       </td>
                       <td>{formatDate(member.createdAt)}</td>
+                      <td>
+                        <div className="row-actions">
+                          <MemberRolesButton
+                            organizationId={organization.id}
+                            memberUserId={member.user.id}
+                            email={member.user.email}
+                            roles={member.roles}
+                          />
+                          <RemoveMemberButton
+                            organizationId={organization.id}
+                            memberUserId={member.user.id}
+                            email={member.user.email}
+                          />
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

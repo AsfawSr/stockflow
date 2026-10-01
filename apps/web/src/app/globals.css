@@ -329,6 +329,11 @@ main {
   margin: 26px 0 12px;
   font-size: 14px;
 }
+.dialog-subject {
+  margin: -10px 0 14px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 .role-fieldset {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -360,6 +365,8 @@ main {
 }
 .service-table-wrapper {
   overflow-x: auto;
+  /* Anchors absolutely positioned helpers (visually-hidden labels) inside the scroll area. */
+  position: relative;
 }
 .service-table {
   width: 100%;
@@ -1501,6 +1508,13 @@ dd {
   .product-table th:nth-child(3),
   .product-table td:nth-child(3) {
     display: none;
+  }
+  .member-table {
+    table-layout: auto;
+  }
+  .member-table th:first-child,
+  .member-table th:nth-child(2) {
+    width: auto;
   }
   .pagination {
     flex-direction: column;

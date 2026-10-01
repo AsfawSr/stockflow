@@ -12,6 +12,8 @@ import {
   loginSchema,
   invitationSchema,
   inviteInputSchema,
+  memberRolesInputSchema,
+  memberSchema,
   locationInputSchema,
   locationSchema,
   membershipSchema,
@@ -710,4 +712,42 @@ export async function changePasswordAction(
       error: result.status === 400 ? 'Your current password is incorrect.' : result.error,
     };
   return { success: 'Password updated. Your other sessions were signed out.' };
+}
+
+const lastAdminMessage = 'An organization needs at least one administrator.';
+
+export async function updateMemberRolesAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const memberUserId = organizationIdSchema.safeParse(form.get('memberUserId'));
+  if (!organizationId.success || !memberUserId.success)
+    return { error: 'This member is no longer available.' };
+  const parsed = memberRolesInputSchema.safeParse({ roles: form.getAll('roles').map(String) });
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/members/${memberUserId.data}`,
+    memberSchema,
+    { method: 'PATCH', body: parsed.data },
+  );
+  if (!result.ok) return { error: result.status === 409 ? lastAdminMessage : result.error };
+  revalidatePath(`/workspace/${organizationId.data}`);
+  return { success: 'Roles updated.' };
+}
+
+export async function removeMemberAction(_previous: FormState, form: FormData): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const memberUserId = organizationIdSchema.safeParse(form.get('memberUserId'));
+  if (!organizationId.success || !memberUserId.success)
+    return { error: 'This member is no longer available.' };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/members/${memberUserId.data}`,
+    emptySchema,
+    { method: 'DELETE' },
+  );
+  if (!result.ok && result.status !== 404)
+    return { error: result.status === 409 ? lastAdminMessage : result.error };
+  revalidatePath(`/workspace/${organizationId.data}`);
+  return { success: 'Member removed.' };
 }
