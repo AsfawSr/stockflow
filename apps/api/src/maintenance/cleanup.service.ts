@@ -44,13 +44,21 @@ export class CleanupService implements OnModuleInit, OnModuleDestroy {
       const invitations = await this.prisma.invitation.deleteMany({
         where: { expiresAt: { lte: now } },
       });
-      const removed = sessions.count + tokens.count + invitations.count;
+      const rateLimits = await this.prisma.rateLimit.deleteMany({
+        where: { expiresAt: { lte: now } },
+      });
+      const removed = sessions.count + tokens.count + invitations.count + rateLimits.count;
       if (removed > 0) {
         this.logger.log(
-          `Removed ${sessions.count} expired sessions, ${tokens.count} account tokens, and ${invitations.count} invitations.`,
+          `Removed ${sessions.count} expired sessions, ${tokens.count} account tokens, ${invitations.count} invitations, and ${rateLimits.count} rate-limit windows.`,
         );
       }
-      return { sessions: sessions.count, tokens: tokens.count, invitations: invitations.count };
+      return {
+        sessions: sessions.count,
+        tokens: tokens.count,
+        invitations: invitations.count,
+        rateLimits: rateLimits.count,
+      };
     } catch {
       this.logger.warn('Expired record cleanup failed; it will retry on the next interval.');
       return null;

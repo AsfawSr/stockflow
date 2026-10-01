@@ -371,3 +371,12 @@ model Invitation {
   @@index([expiresAt])
   @@map("invitations")
 }
+
+model RateLimit {
+  key       String   @id @db.VarChar(128)
+  hits      Int
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+
+  @@index([expiresAt])
+  @@map("rate_limits")
+}
