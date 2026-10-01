@@ -434,7 +434,10 @@ traffic. With `RATE_LIMIT_STORE=database` the counters hold across all API
 processes; per-end-client attribution still requires terminating ingress in front
 of both applications and setting `TRUSTED_PROXY_HOPS` accordingly. Do not blindly
 trust forwarded headers.
-Production mail monitoring remains outstanding.
+Mail delivery is observable at `GET /api/health/mail`: in-process sent/failed
+counters with last success and failure times, reported as `degraded` whenever the
+most recent delivery failed. The endpoint never exposes recipients or message
+content, and the status page shows the same signal as an Email delivery card.
 
 ## Organization Access
 
@@ -448,14 +451,16 @@ using its URL id; arbitrary headers cannot change the authorization scope.
 | POST | `/organizations` | Any verified authenticated user; creates their `ADMIN` membership atomically. |
 | GET | `/organizations/:organizationId` | Current membership in that organization. |
 | PATCH | `/organizations/:organizationId` | Current `ADMIN` role; renames the organization only. |
-| GET | `/organizations/:organizationId/members` | Current `ADMIN` role; returns safe member profiles and roles. |
+| GET | `/organizations/:organizationId/members` | Current `ADMIN` role; returns safe member profiles and roles, paginated. |
 | PATCH | `/organizations/:organizationId/members/:memberUserId` | Current `ADMIN` role; replaces a member's role set. |
 | DELETE | `/organizations/:organizationId/members/:memberUserId` | Current `ADMIN` role; removes the membership. |
 
 Create accepts only `name` and `currency`; rename accepts only `name`. Clients cannot
 assign themselves roles, provide an owner id, or change currency through rename.
-Unknown body properties are rejected rather than silently used. The current
-collection endpoints return complete lists; pagination is needed before large-scale use.
+Unknown body properties are rejected rather than silently used. Member and
+invitation lists are paginated (`page`, `pageSize` up to 100) and the overview
+screen pages through both; `GET /organizations` still returns the caller's
+complete membership list, which is naturally small.
 
 Membership and roles are read from PostgreSQL for each organization request and are
 not stored in access tokens. An admin role in one organization grants no access to
@@ -502,6 +507,7 @@ of database availability. `GET /api/health/ready` executes `SELECT 1` through Pr
 and returns `{"status":"ok","service":"stockflow-api","database":"connected"}`.
 It returns HTTP 503 with `database: "unavailable"` on connection or query failure,
 without exposing connection strings or database error details.
+`GET /api/health/mail` reports email delivery counters and a degraded flag.
 The API port can be overridden with the `PORT` environment variable.
 
 To override the API address, create `apps/web/.env.local` using
@@ -528,11 +534,13 @@ docker compose up -d --build --wait
 The stack starts PostgreSQL 17 with a persistent volume, runs
 `prisma migrate deploy` as a one-shot `migrate` service after the database is
 healthy, starts the API only after migrations complete, and starts the web
-server once the API readiness probe (which checks the database) passes. Only
-the web server publishes a port; the API and database stay on the internal
-network. Production requires SMTP mail settings and an HTTPS `WEB_ORIGIN`; the
-API refuses to boot with the development file transport. Terminate TLS in a
-reverse proxy in front of the web port and set `TRUSTED_PROXY_HOPS` to match.
+server once the API readiness probe (which checks the database) passes. A Caddy
+ingress is the only published entry point (ports 80 and 443): it redirects HTTP
+to HTTPS, provisions certificates automatically (ACME for the configured
+`DOMAIN`, a local CA for the `localhost` default), and proxies to the web tier;
+the web server, API, and database stay on the internal network. Production
+requires SMTP mail settings and an HTTPS `WEB_ORIGIN` whose host matches
+`DOMAIN`; the API refuses to boot with the development file transport.
 
 In production the API emits one JSON log line per request with a request id,
 method, path, status, and duration; health probes are tagged but not logged. An
@@ -666,8 +674,13 @@ hops. Milestone 8 makes the platform deployable: production container images
 for both applications, a compose stack with ordered migrations and health
 checks verified end to end, structured JSON access logs with request ids, and
 a tagged-release pipeline that publishes images to GitHub Container Registry.
-Remaining before public deployment: production mail monitoring, pagination for
-member lists, and a managed TLS ingress in front of the stack.
+Milestone 9 finishes the operational checklist: mail delivery health is
+monitored at `/api/health/mail` and on the status page, member and invitation
+lists are paginated end to end, and a Caddy TLS ingress with automatic
+certificates fronts the compose stack as its only published entry point.
+Possible next steps are feature work: dashboard widgets, a full stock movement
+history screen, CSV exports, and procurement depth such as reorder suggestions
+and supplier price history.
 
 ## Commit Workflow
 
