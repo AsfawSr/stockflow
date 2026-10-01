@@ -48,6 +48,18 @@ export const memberSchema = z.object({
   createdAt: z.iso.datetime(),
 });
 export const membersSchema = z.array(memberSchema);
+export const memberListSchema = z.object({
+  items: membersSchema,
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export const invitationListSchema = z.object({
+  items: invitationsSchema,
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
 export const memberRolesInputSchema = z.object({
   roles: z.array(roleSchema).min(1, 'Choose at least one role.'),
 });

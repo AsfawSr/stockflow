@@ -1,14 +1,46 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  invitationListSchema,
   invitationSchema,
   invitationsSchema,
   inviteInputSchema,
+  memberListSchema,
   memberRolesInputSchema,
   memberSchema,
 } from '../src/lib/contracts';
 
 const uuid = '8ed13b94-fd8b-4079-848e-f22edaa8ce05';
+
+test('validates paginated member and invitation lists', () => {
+  const member = {
+    user: { id: uuid, email: 'colleague@example.test', displayName: 'Colleague' },
+    roles: ['MANAGER'],
+    createdAt: new Date().toISOString(),
+  };
+  const invitation = {
+    id: uuid,
+    email: 'colleague@example.test',
+    roles: ['PURCHASER'],
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 60000).toISOString(),
+    invitedBy: { id: uuid, displayName: 'Admin User' },
+  };
+  assert.equal(
+    memberListSchema.safeParse({ items: [member], total: 1, page: 1, pageSize: 20 }).success,
+    true,
+  );
+  assert.equal(
+    invitationListSchema.safeParse({ items: [invitation], total: 1, page: 1, pageSize: 20 })
+      .success,
+    true,
+  );
+  assert.equal(memberListSchema.safeParse([member]).success, false);
+  assert.equal(
+    memberListSchema.safeParse({ items: [member], total: -1, page: 1, pageSize: 20 }).success,
+    false,
+  );
+});
 
 test('normalizes invite input and requires at least one valid role', () => {
   assert.deepEqual(

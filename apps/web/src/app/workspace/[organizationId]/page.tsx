@@ -1,29 +1,54 @@
 import { ArrowLeftRight, Building2, CalendarDays, Coins } from 'lucide-react';
 import Link from 'next/link';
+import { z } from 'zod';
 import { AppShell } from '@/components/app-shell';
 import { InviteMemberButton, RevokeInvitationButton } from '@/components/invitation-forms';
 import { MemberRolesButton, RemoveMemberButton } from '@/components/member-forms';
 import { RenameOrganizationForm } from '@/components/organization-forms';
-import { invitationsSchema, membersSchema, roleLabels } from '@/lib/contracts';
+import { invitationListSchema, memberListSchema, roleLabels } from '@/lib/contracts';
 import { authenticatedRequest, requireOrganization, requireUser } from '@/lib/session';
 
 export const metadata = { title: 'Workspace' };
 
+const pageParam = z.coerce.number().int().min(1).max(100000).optional();
+const querySchema = z.object({ membersPage: pageParam, invitesPage: pageParam });
+
 export default async function WorkspacePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ organizationId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { organizationId } = await params;
   const user = await requireUser();
   const organization = await requireOrganization(organizationId);
   const admin = organization.roles.includes('ADMIN');
+  const rawQuery = querySchema.safeParse(await searchParams);
+  const query = rawQuery.success ? rawQuery.data : querySchema.parse({});
   const [members, invitations] = await Promise.all([
-    admin ? authenticatedRequest(`/organizations/${organization.id}/members`, membersSchema) : null,
     admin
-      ? authenticatedRequest(`/organizations/${organization.id}/invitations`, invitationsSchema)
+      ? authenticatedRequest(
+          `/organizations/${organization.id}/members?page=${query.membersPage ?? 1}`,
+          memberListSchema,
+        )
+      : null,
+    admin
+      ? authenticatedRequest(
+          `/organizations/${organization.id}/invitations?page=${query.invitesPage ?? 1}`,
+          invitationListSchema,
+        )
       : null,
   ]);
+  const pageLink = (changes: { membersPage?: number; invitesPage?: number }) => {
+    const linkQuery = new URLSearchParams();
+    const membersPage = changes.membersPage ?? query.membersPage ?? 1;
+    const invitesPage = changes.invitesPage ?? query.invitesPage ?? 1;
+    if (membersPage > 1) linkQuery.set('membersPage', String(membersPage));
+    if (invitesPage > 1) linkQuery.set('invitesPage', String(invitesPage));
+    const suffix = linkQuery.toString();
+    return `/workspace/${organization.id}${suffix ? `?${suffix}` : ''}`;
+  };
   const formatDate = (date: string) =>
     new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(
       new Date(date),
@@ -83,7 +108,7 @@ export default async function WorkspacePage({
             <div className="section-heading-actions">
               {members?.ok && (
                 <span>
-                  {members.data.length} {members.data.length === 1 ? 'member' : 'members'}
+                  {members.data.total} {members.data.total === 1 ? 'member' : 'members'}
                 </span>
               )}
               <InviteMemberButton organizationId={organization.id} />
@@ -103,7 +128,7 @@ export default async function WorkspacePage({
                   </tr>
                 </thead>
                 <tbody>
-                  {members.data.map((member) => (
+                  {members.data.items.map((member) => (
                     <tr key={member.user.id}>
                       <td>
                         <div className="member-name">
@@ -146,7 +171,33 @@ export default async function WorkspacePage({
               {members && !members.ok ? members.error : 'Member list unavailable.'}
             </p>
           )}
-          {invitations?.ok && invitations.data.length > 0 && (
+          {members?.ok && members.data.total > members.data.pageSize && (
+            <div className="pagination">
+              <span>
+                Page {members.data.page} of{' '}
+                {Math.max(1, Math.ceil(members.data.total / members.data.pageSize))}
+              </span>
+              <div className="button-row">
+                {members.data.page > 1 ? (
+                  <Link
+                    className="secondary-button"
+                    href={pageLink({ membersPage: members.data.page - 1 })}
+                  >
+                    Previous members
+                  </Link>
+                ) : null}
+                {members.data.page * members.data.pageSize < members.data.total ? (
+                  <Link
+                    className="secondary-button"
+                    href={pageLink({ membersPage: members.data.page + 1 })}
+                  >
+                    Next members
+                  </Link>
+                ) : null}
+              </div>
+            </div>
+          )}
+          {invitations?.ok && invitations.data.items.length > 0 && (
             <>
               <h3 className="subsection-heading">Pending invitations</h3>
               <div className="service-table-wrapper">
@@ -163,7 +214,7 @@ export default async function WorkspacePage({
                     </tr>
                   </thead>
                   <tbody>
-                    {invitations.data.map((invitation) => (
+                    {invitations.data.items.map((invitation) => (
                       <tr key={invitation.id}>
                         <td>{invitation.email}</td>
                         <td>
@@ -189,6 +240,32 @@ export default async function WorkspacePage({
                   </tbody>
                 </table>
               </div>
+              {invitations.data.total > invitations.data.pageSize && (
+                <div className="pagination">
+                  <span>
+                    Page {invitations.data.page} of{' '}
+                    {Math.max(1, Math.ceil(invitations.data.total / invitations.data.pageSize))}
+                  </span>
+                  <div className="button-row">
+                    {invitations.data.page > 1 ? (
+                      <Link
+                        className="secondary-button"
+                        href={pageLink({ invitesPage: invitations.data.page - 1 })}
+                      >
+                        Previous invitations
+                      </Link>
+                    ) : null}
+                    {invitations.data.page * invitations.data.pageSize < invitations.data.total ? (
+                      <Link
+                        className="secondary-button"
+                        href={pageLink({ invitesPage: invitations.data.page + 1 })}
+                      >
+                        Next invitations
+                      </Link>
+                    ) : null}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </section>
