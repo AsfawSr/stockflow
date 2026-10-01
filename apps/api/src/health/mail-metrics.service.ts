@@ -6,25 +6,25 @@ import { Injectable } from '@nestjs/common';
 export class MailMetrics {
   private sent = 0;
   private failed = 0;
+  private lastOutcome: 'success' | 'failure' | null = null;
   private lastSuccessAt: Date | null = null;
   private lastFailureAt: Date | null = null;
 
   recordSuccess() {
     this.sent += 1;
+    this.lastOutcome = 'success';
     this.lastSuccessAt = new Date();
   }
 
   recordFailure() {
     this.failed += 1;
+    this.lastOutcome = 'failure';
     this.lastFailureAt = new Date();
   }
 
   snapshot() {
-    const degraded =
-      this.lastFailureAt !== null &&
-      (this.lastSuccessAt === null || this.lastFailureAt > this.lastSuccessAt);
     return {
-      status: degraded ? 'degraded' : 'ok',
+      status: this.lastOutcome === 'failure' ? 'degraded' : 'ok',
       sent: this.sent,
       failed: this.failed,
       lastSuccessAt: this.lastSuccessAt?.toISOString() ?? null,

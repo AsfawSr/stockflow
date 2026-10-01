@@ -333,9 +333,10 @@ describe('Authentication and authorization against PostgreSQL', () => {
         .get(`/api/organizations/${organizationId}/members`)
         .set('Authorization', `Bearer ${owner.token}`)
         .expect(200);
-      expect(members.body).toHaveLength(2);
+      expect(members.body).toMatchObject({ total: 2, page: 1, pageSize: 20 });
+      expect(members.body.items).toHaveLength(2);
       expect(
-        members.body.every(
+        members.body.items.every(
           (entry: { user: object }) =>
             Object.keys(entry.user).sort().join(',') === 'displayName,email,id',
         ),

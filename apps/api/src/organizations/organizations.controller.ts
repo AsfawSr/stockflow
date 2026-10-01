@@ -9,11 +9,13 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import type { AuthenticatedRequest } from '../auth/auth.guard';
 import { VerifiedEmailGuard } from '../auth/auth.guard';
+import { PageQueryDto } from '../common/list-query.dto';
 import { OrganizationAccessGuard, Roles } from './organization-access.guard';
 import {
   CreateOrganizationDto,
@@ -62,8 +64,12 @@ export class OrganizationsController {
   @UseGuards(OrganizationAccessGuard)
   @Roles('ADMIN')
   @Header('Cache-Control', 'no-store')
-  members(@Req() request: AuthenticatedRequest, @Param('organizationId') organizationId: string) {
-    return this.organizations.members(request.principal.user.id, organizationId);
+  members(
+    @Req() request: AuthenticatedRequest,
+    @Param('organizationId') organizationId: string,
+    @Query() query: PageQueryDto,
+  ) {
+    return this.organizations.members(request.principal.user.id, organizationId, query);
   }
 
   @Patch(':organizationId/members/:memberUserId')

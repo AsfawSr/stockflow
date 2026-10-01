@@ -143,8 +143,9 @@ describe('Invitation APIs against PostgreSQL', () => {
         .get(base)
         .set('Authorization', owner.auth)
         .expect(200);
-      expect(listed.body).toHaveLength(1);
-      expect(listed.body[0].roles).toEqual(['PURCHASER']);
+      expect(listed.body).toMatchObject({ total: 1, page: 1, pageSize: 20 });
+      expect(listed.body.items).toHaveLength(1);
+      expect(listed.body.items[0].roles).toEqual(['PURCHASER']);
 
       const invitee = await registerVerified(app, inviteeEmail);
       await request(app.getHttpServer())
@@ -170,7 +171,7 @@ describe('Invitation APIs against PostgreSQL', () => {
         .get(base)
         .set('Authorization', owner.auth)
         .expect(200);
-      expect(remaining.body).toHaveLength(0);
+      expect(remaining.body.items).toHaveLength(0);
       await request(app.getHttpServer())
         .post('/api/invitations/accept')
         .set('Authorization', invitee.auth)
@@ -243,7 +244,7 @@ describe('Invitation APIs against PostgreSQL', () => {
         .get(base)
         .set('Authorization', owner.auth)
         .expect(200);
-      expect(listed.body).toHaveLength(0);
+      expect(listed.body.items).toHaveLength(0);
 
       failNextMail = true;
       await request(app.getHttpServer())
@@ -255,7 +256,7 @@ describe('Invitation APIs against PostgreSQL', () => {
         .get(base)
         .set('Authorization', owner.auth)
         .expect(200);
-      expect(afterFailure.body).toHaveLength(0);
+      expect(afterFailure.body.items).toHaveLength(0);
     });
   }, 60000);
 

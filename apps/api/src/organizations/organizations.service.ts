@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { PageQueryDto } from '../common/list-query.dto';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -63,19 +64,28 @@ export class OrganizationsService {
     }
   }
 
-  members(userId: string, organizationId: string) {
-    return this.prisma.membership.findMany({
-      where: {
-        organizationId,
-        organization: { memberships: { some: { userId, roles: { has: 'ADMIN' } } } },
-      },
-      select: {
-        roles: true,
-        createdAt: true,
-        user: { select: { id: true, email: true, displayName: true } },
-      },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    });
+  async members(userId: string, organizationId: string, query: PageQueryDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const where = {
+      organizationId,
+      organization: { memberships: { some: { userId, roles: { has: 'ADMIN' as const } } } },
+    };
+    const [items, total] = await Promise.all([
+      this.prisma.membership.findMany({
+        where,
+        select: {
+          roles: true,
+          createdAt: true,
+          user: { select: { id: true, email: true, displayName: true } },
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.membership.count({ where }),
+    ]);
+    return { items, total, page, pageSize };
   }
 
   // Locks the organization row so competing admin-set changes serialize.

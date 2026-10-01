@@ -8,11 +8,13 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import type { AuthenticatedRequest } from '../auth/auth.guard';
 import { VerifiedEmailGuard } from '../auth/auth.guard';
+import { PageQueryDto } from '../common/list-query.dto';
 import { OrganizationAccessGuard, Roles } from '../organizations/organization-access.guard';
 import { AcceptInvitationDto, CreateInvitationDto } from './invitations.dto';
 import { InvitationsService } from './invitations.service';
@@ -25,8 +27,8 @@ export class OrganizationInvitationsController {
 
   @Get()
   @Header('Cache-Control', 'no-store')
-  list(@Param('organizationId') organizationId: string) {
-    return this.invitations.list(organizationId);
+  list(@Param('organizationId') organizationId: string, @Query() query: PageQueryDto) {
+    return this.invitations.list(organizationId, query);
   }
 
   @Post()

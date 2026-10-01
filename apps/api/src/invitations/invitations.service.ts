@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import { AccountMailer } from '../auth/account-mailer.service';
+import { PageQueryDto } from '../common/list-query.dto';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInvitationDto } from './invitations.dto';
@@ -31,12 +32,21 @@ export class InvitationsService {
     private readonly mailer: AccountMailer,
   ) {}
 
-  list(organizationId: string) {
-    return this.prisma.invitation.findMany({
-      where: { organizationId, expiresAt: { gt: new Date() } },
-      select: invitationSelect,
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    });
+  async list(organizationId: string, query: PageQueryDto) {
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const where = { organizationId, expiresAt: { gt: new Date() } };
+    const [items, total] = await Promise.all([
+      this.prisma.invitation.findMany({
+        where,
+        select: invitationSelect,
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.invitation.count({ where }),
+    ]);
+    return { items, total, page, pageSize };
   }
 
   async create(organizationId: string, userId: string, input: CreateInvitationDto) {

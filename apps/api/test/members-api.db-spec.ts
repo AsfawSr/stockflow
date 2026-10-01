@@ -152,7 +152,14 @@ describe('Member management APIs against PostgreSQL', () => {
         .get(base)
         .set('Authorization', member.auth)
         .expect(200);
-      expect(members.body).toHaveLength(1);
+      expect(members.body.total).toBe(1);
+      expect(members.body.items).toHaveLength(1);
+      const paged = await request(app.getHttpServer())
+        .get(`${base}?page=2&pageSize=1`)
+        .set('Authorization', member.auth)
+        .expect(200);
+      expect(paged.body).toMatchObject({ total: 1, page: 2, pageSize: 1 });
+      expect(paged.body.items).toHaveLength(0);
     });
   }, 60000);
 
