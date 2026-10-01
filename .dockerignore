@@ -1,0 +1,15 @@
+.git
+.github
+node_modules
+**/node_modules
+**/dist
+apps/web/.next
+apps/web/test-results
+apps/web/playwright-report
+apps/web/e2e
+apps/api/.local
+**/.env
+**/.env.*
+!.env.example
+**/*.md
+docker-compose.yml
