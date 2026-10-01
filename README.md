@@ -509,6 +509,41 @@ To override the API address, create `apps/web/.env.local` using
 setting; it does not need a `NEXT_PUBLIC_` prefix. Restart Next.js after changing it.
 Both development servers bind to the local machine only.
 
+## Deployment
+
+Both applications ship as production container images built from the repository
+root: `apps/api/Dockerfile` (multi-stage; the `runtime` target carries only
+production dependencies and the compiled output, and runs as the unprivileged
+`node` user) and `apps/web/Dockerfile` (Next.js standalone output). Containers
+bind to `0.0.0.0` through the `HOST`/`HOSTNAME` variables; local development
+stays loopback-only.
+
+For a single-host deployment, copy `.env.example` to `.env`, replace every
+placeholder, and run:
+
+```sh
+docker compose up -d --build --wait
+```
+
+The stack starts PostgreSQL 17 with a persistent volume, runs
+`prisma migrate deploy` as a one-shot `migrate` service after the database is
+healthy, starts the API only after migrations complete, and starts the web
+server once the API readiness probe (which checks the database) passes. Only
+the web server publishes a port; the API and database stay on the internal
+network. Production requires SMTP mail settings and an HTTPS `WEB_ORIGIN`; the
+API refuses to boot with the development file transport. Terminate TLS in a
+reverse proxy in front of the web port and set `TRUSTED_PROXY_HOPS` to match.
+
+In production the API emits one JSON log line per request with a request id,
+method, path, status, and duration; health probes are tagged but not logged. An
+inbound `X-Request-Id` header is kept when well-formed and is always echoed on
+the response, so logs correlate across the proxy, web, and API tiers.
+
+Tagging a release (`v*`) builds both images for linux/amd64 and pushes them to
+GitHub Container Registry as `<repository>-api` and `<repository>-web` with
+semver and commit tags; the `docker-compose.yml` file can point at those images
+instead of building locally.
+
 ## Verification
 
 ```sh
@@ -627,8 +662,12 @@ and production email delivery requires SMTP with bounded timeouts. Milestone 7
 completes account and access hardening: signed-in password changes from the
 account screen, admin role editing and member removal with last-admin protection,
 and optional PostgreSQL-backed rate limiting with configurable trusted proxy
-hops. Remaining before public deployment: production mail monitoring, pagination
-for member lists, and a deployment pipeline.
+hops. Milestone 8 makes the platform deployable: production container images
+for both applications, a compose stack with ordered migrations and health
+checks verified end to end, structured JSON access logs with request ids, and
+a tagged-release pipeline that publishes images to GitHub Container Registry.
+Remaining before public deployment: production mail monitoring, pagination for
+member lists, and a managed TLS ingress in front of the stack.
 
 ## Commit Workflow
 
