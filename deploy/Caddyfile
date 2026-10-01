@@ -1,0 +1,7 @@
+# The ingress terminates TLS and proxies everything to the web tier.
+# Caddy provisions certificates automatically: ACME for public domains,
+# a local CA for the localhost default.
+{$DOMAIN:localhost} {
+	encode gzip
+	reverse_proxy web:3000
+}

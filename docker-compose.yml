@@ -70,8 +70,6 @@ services:
     restart: unless-stopped
     environment:
       API_BASE_URL: ${API_BASE_URL:-http://api:3001}
-    ports:
-      - '3000:3000'
     depends_on:
       api:
         condition: service_healthy
@@ -88,5 +86,23 @@ services:
       retries: 5
       start_period: 10s
 
+  ingress:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web:
+        condition: service_healthy
+
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:
