@@ -1,6 +1,6 @@
-import { Check, CircleAlert, Database, Globe, Server, ShieldCheck } from 'lucide-react';
+import { Check, CircleAlert, Database, Globe, Mail, Server, ShieldCheck } from 'lucide-react';
 import { AppShell } from '@/components/app-shell';
-import { getApiHealth, isDatabaseReady } from '@/lib/api-health';
+import { getApiHealth, getMailHealth, isDatabaseReady } from '@/lib/api-health';
 import { currentUser } from '@/lib/session';
 import { RefreshButton } from '../refresh-button';
 
@@ -8,9 +8,10 @@ export const metadata = { title: 'System status' };
 export const dynamic = 'force-dynamic';
 
 export default async function StatusPage() {
-  const [health, databaseReady, account] = await Promise.all([
+  const [health, databaseReady, mail, account] = await Promise.all([
     getApiHealth(),
     isDatabaseReady(),
+    getMailHealth(),
     currentUser(),
   ]);
   const connected = health.connected && databaseReady;
@@ -30,7 +31,7 @@ export default async function StatusPage() {
       name: 'Web application',
       detail: 'stockflow / web',
       icon: Globe,
-      online: true,
+      tone: 'online',
       status: 'Online',
       stack: 'Next.js',
       check: 'Page rendered',
@@ -39,7 +40,7 @@ export default async function StatusPage() {
       name: 'Backend API',
       detail: 'stockflow / api',
       icon: Server,
-      online: health.connected,
+      tone: health.connected ? 'online' : 'offline',
       status: health.connected ? 'Online' : 'Unavailable',
       stack: 'NestJS',
       check: health.connected ? `${health.durationMs} ms` : 'Failed',
@@ -48,10 +49,19 @@ export default async function StatusPage() {
       name: 'Database',
       detail: 'Readiness query',
       icon: Database,
-      online: databaseReady,
+      tone: databaseReady ? 'online' : 'offline',
       status: databaseReady ? 'Connected' : 'Unavailable',
       stack: 'PostgreSQL',
       check: databaseReady ? 'Query passed' : 'Failed',
+    },
+    {
+      name: 'Email delivery',
+      detail: 'Account and invitation mail',
+      icon: Mail,
+      tone: !mail.known ? 'pending' : mail.degraded ? 'offline' : 'online',
+      status: !mail.known ? 'Unknown' : mail.degraded ? 'Degraded' : 'Operational',
+      stack: 'SMTP',
+      check: mail.known ? `${mail.sent} sent / ${mail.failed} failed` : 'Unavailable',
     },
   ];
   return (
@@ -95,7 +105,7 @@ export default async function StatusPage() {
       <section className="services-section" aria-labelledby="services-title">
         <div className="section-heading">
           <h2 id="services-title">Application services</h2>
-          <span>03 services</span>
+          <span>04 services</span>
         </div>
         <div className="service-table-wrapper">
           <table className="service-table">
@@ -124,7 +134,7 @@ export default async function StatusPage() {
                     </div>
                   </td>
                   <td>
-                    <span className={`badge ${service.online ? 'online' : 'offline'}`}>
+                    <span className={`badge ${service.tone}`}>
                       <span />
                       {service.status}
                     </span>

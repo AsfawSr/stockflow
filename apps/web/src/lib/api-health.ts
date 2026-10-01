@@ -29,6 +29,48 @@ export async function isDatabaseReady(): Promise<boolean> {
   }
 }
 
+export type MailHealth = {
+  known: boolean;
+  degraded: boolean;
+  sent: number;
+  failed: number;
+};
+
+export async function getMailHealth(): Promise<MailHealth> {
+  const unknown = { known: false, degraded: false, sent: 0, failed: 0 };
+  try {
+    const baseUrl = process.env.API_BASE_URL ?? 'http://127.0.0.1:3001';
+    const result = await fetch(`${baseUrl.replace(/\/$/, '')}/api/health/mail`, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!result.ok) return unknown;
+    const payload: unknown = await result.json();
+    if (
+      typeof payload === 'object' &&
+      payload !== null &&
+      'service' in payload &&
+      payload.service === 'stockflow-api' &&
+      'status' in payload &&
+      (payload.status === 'ok' || payload.status === 'degraded') &&
+      'sent' in payload &&
+      typeof payload.sent === 'number' &&
+      'failed' in payload &&
+      typeof payload.failed === 'number'
+    ) {
+      return {
+        known: true,
+        degraded: payload.status === 'degraded',
+        sent: payload.sent,
+        failed: payload.failed,
+      };
+    }
+    return unknown;
+  } catch {
+    return unknown;
+  }
+}
+
 export type ApiHealth = {
   connected: boolean;
   checkedAt: string;

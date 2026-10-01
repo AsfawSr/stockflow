@@ -1,6 +1,41 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { getApiHealth, isDatabaseReady } from '../src/lib/api-health';
+import { getApiHealth, getMailHealth, isDatabaseReady } from '../src/lib/api-health';
+
+test('reads mail delivery health with a fresh bounded request', async (context) => {
+  context.mock.method(globalThis, 'fetch', async (url: string, options: RequestInit) => {
+    assert.ok(url.endsWith('/api/health/mail'));
+    assert.equal(options.cache, 'no-store');
+    assert.ok(options.signal instanceof AbortSignal);
+    return Response.json({
+      service: 'stockflow-api',
+      status: 'degraded',
+      sent: 7,
+      failed: 2,
+      lastSuccessAt: null,
+      lastFailureAt: new Date().toISOString(),
+    });
+  });
+  assert.deepEqual(await getMailHealth(), { known: true, degraded: true, sent: 7, failed: 2 });
+});
+
+test('treats unreachable, failed, or foreign mail health as unknown', async (context) => {
+  const unknown = { known: false, degraded: false, sent: 0, failed: 0 };
+  context.mock.method(globalThis, 'fetch', async () => {
+    throw new TypeError('fetch failed');
+  });
+  assert.deepEqual(await getMailHealth(), unknown);
+  context.mock.method(globalThis, 'fetch', async () => new Response(null, { status: 503 }));
+  assert.deepEqual(await getMailHealth(), unknown);
+  context.mock.method(globalThis, 'fetch', async () =>
+    Response.json({ service: 'other-api', status: 'ok', sent: 1, failed: 0 }),
+  );
+  assert.deepEqual(await getMailHealth(), unknown);
+  context.mock.method(globalThis, 'fetch', async () =>
+    Response.json({ service: 'stockflow-api', status: 'ok', sent: 'many', failed: 0 }),
+  );
+  assert.deepEqual(await getMailHealth(), unknown);
+});
 
 test('recognizes the StockFlow API and avoids caching health checks', async (context) => {
   context.mock.method(globalThis, 'fetch', async (url: string, options: RequestInit) => {
