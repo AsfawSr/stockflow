@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createTransport, Transporter } from 'nodemailer';
+import { MailMetrics } from '../health/mail-metrics.service';
 
 export type AccountEmail = { to: string; subject: string; text: string; actionUrl: string };
 
@@ -13,7 +14,10 @@ export class AccountMailer implements OnModuleDestroy {
   readonly webOrigin: string;
   private readonly from: string;
 
-  constructor(config: ConfigService) {
+  constructor(
+    config: ConfigService,
+    private readonly metrics: MailMetrics,
+  ) {
     const production = config.get('NODE_ENV') === 'production';
     const origin = new URL(
       config.get<string>('WEB_ORIGIN') ?? (production ? '' : 'http://127.0.0.1:3000'),
@@ -49,6 +53,16 @@ export class AccountMailer implements OnModuleDestroy {
   }
 
   async send(message: AccountEmail): Promise<void> {
+    try {
+      await this.deliver(message);
+      this.metrics.recordSuccess();
+    } catch (error) {
+      this.metrics.recordFailure();
+      throw error;
+    }
+  }
+
+  private async deliver(message: AccountEmail): Promise<void> {
     if (this.transport) {
       await this.transport.sendMail({
         from: this.from,

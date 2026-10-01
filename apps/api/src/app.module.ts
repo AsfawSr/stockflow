@@ -16,6 +16,7 @@ import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
 import { StockModule } from './stock/stock.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { MaintenanceModule } from './maintenance/maintenance.module';
+import { MonitoringModule } from './health/monitoring.module';
 import { PostgresThrottlerStorage } from './maintenance/postgres-throttler.storage';
 
 @Module({
@@ -31,6 +32,7 @@ import { PostgresThrottlerStorage } from './maintenance/postgres-throttler.stora
     StockModule,
     InvitationsModule,
     MaintenanceModule,
+    MonitoringModule,
     ThrottlerModule.forRootAsync({
       imports: [PrismaModule],
       inject: [ConfigService, PrismaService],
