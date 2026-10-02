@@ -484,6 +484,17 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
 
+  // The pulse cards reflect the ledger and the activity feed shows the latest movement.
+  await expect(page.locator('.stat-card').filter({ hasText: 'On-hand balances' })).toContainText(
+    '2',
+  );
+  await expect(page.locator('.stat-card').filter({ hasText: 'Low stock' })).toContainText('1');
+  await expect(page.locator('.stat-card').filter({ hasText: 'Awaiting approval' })).toContainText(
+    '0',
+  );
+  await expect(page.locator('.activity-list li').first()).toContainText('Adjustment');
+  await expect(page.locator('.activity-list li').first()).toContainText('at Main Warehouse');
+
   // Invite, revoke, and re-invite the outsider before their account exists.
   await page.getByRole('button', { name: 'Invite member', exact: true }).click();
   const inviteDialog = page.getByRole('dialog', { name: 'Invite member', exact: true });

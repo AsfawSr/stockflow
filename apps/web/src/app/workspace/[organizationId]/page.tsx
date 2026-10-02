@@ -1,11 +1,27 @@
-import { ArrowLeftRight, Building2, CalendarDays, Coins } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  Boxes,
+  Building2,
+  CalendarDays,
+  CircleAlert,
+  ClipboardList,
+  Coins,
+} from 'lucide-react';
 import Link from 'next/link';
 import { z } from 'zod';
 import { AppShell } from '@/components/app-shell';
 import { InviteMemberButton, RevokeInvitationButton } from '@/components/invitation-forms';
 import { MemberRolesButton, RemoveMemberButton } from '@/components/member-forms';
 import { RenameOrganizationForm } from '@/components/organization-forms';
-import { invitationListSchema, memberListSchema, roleLabels } from '@/lib/contracts';
+import {
+  invitationListSchema,
+  memberListSchema,
+  movementTypeLabels,
+  purchaseOrderListSchema,
+  roleLabels,
+  stockLevelListSchema,
+  stockMovementListSchema,
+} from '@/lib/contracts';
 import { authenticatedRequest, requireOrganization, requireUser } from '@/lib/session';
 
 export const metadata = { title: 'Workspace' };
@@ -26,20 +42,58 @@ export default async function WorkspacePage({
   const admin = organization.roles.includes('ADMIN');
   const rawQuery = querySchema.safeParse(await searchParams);
   const query = rawQuery.success ? rawQuery.data : querySchema.parse({});
-  const [members, invitations] = await Promise.all([
-    admin
-      ? authenticatedRequest(
-          `/organizations/${organization.id}/members?page=${query.membersPage ?? 1}`,
-          memberListSchema,
-        )
-      : null,
-    admin
-      ? authenticatedRequest(
-          `/organizations/${organization.id}/invitations?page=${query.invitesPage ?? 1}`,
-          invitationListSchema,
-        )
-      : null,
-  ]);
+  const [members, invitations, balances, lowBalances, submittedOrders, recentMovements] =
+    await Promise.all([
+      admin
+        ? authenticatedRequest(
+            `/organizations/${organization.id}/members?page=${query.membersPage ?? 1}`,
+            memberListSchema,
+          )
+        : null,
+      admin
+        ? authenticatedRequest(
+            `/organizations/${organization.id}/invitations?page=${query.invitesPage ?? 1}`,
+            invitationListSchema,
+          )
+        : null,
+      authenticatedRequest(
+        `/organizations/${organization.id}/stock/levels?pageSize=1`,
+        stockLevelListSchema,
+      ),
+      authenticatedRequest(
+        `/organizations/${organization.id}/stock/levels?low=true&pageSize=1`,
+        stockLevelListSchema,
+      ),
+      authenticatedRequest(
+        `/organizations/${organization.id}/purchase-orders?status=SUBMITTED&pageSize=1`,
+        purchaseOrderListSchema,
+      ),
+      authenticatedRequest(
+        `/organizations/${organization.id}/stock/movements?pageSize=5`,
+        stockMovementListSchema,
+      ),
+    ]);
+  const pulse = [
+    {
+      label: 'On-hand balances',
+      value: balances.ok ? balances.data.total : null,
+      href: `/workspace/${organization.id}/stock`,
+      icon: Boxes,
+    },
+    {
+      label: 'Low stock',
+      value: lowBalances.ok ? lowBalances.data.total : null,
+      href: `/workspace/${organization.id}/stock?show=low`,
+      icon: CircleAlert,
+      alert: lowBalances.ok && lowBalances.data.total > 0,
+    },
+    {
+      label: 'Awaiting approval',
+      value: submittedOrders.ok ? submittedOrders.data.total : null,
+      href: `/workspace/${organization.id}/purchase-orders?status=SUBMITTED`,
+      icon: ClipboardList,
+    },
+  ];
   const pageLink = (changes: { membersPage?: number; invitesPage?: number }) => {
     const linkQuery = new URLSearchParams();
     const membersPage = changes.membersPage ?? query.membersPage ?? 1;
@@ -53,6 +107,12 @@ export default async function WorkspacePage({
     new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(
       new Date(date),
     );
+  const formatTime = (date: string) =>
+    new Intl.DateTimeFormat('en-GB', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: 'UTC',
+    }).format(new Date(date));
   return (
     <AppShell user={user} organization={organization} section="Overview">
       <div className="page-heading workspace-heading">
@@ -100,6 +160,46 @@ export default async function WorkspacePage({
           </dl>
           {admin && <RenameOrganizationForm organization={organization} />}
         </div>
+      </section>
+      <section className="workspace-section" aria-labelledby="pulse-heading">
+        <div className="section-heading">
+          <h2 id="pulse-heading">Workspace pulse</h2>
+          <span>LIVE COUNTS</span>
+        </div>
+        <div className="stat-grid">
+          {pulse.map((stat) => (
+            <Link
+              key={stat.label}
+              href={stat.href}
+              className={`stat-card${stat.alert ? ' is-alert' : ''}`}
+            >
+              <stat.icon size={18} aria-hidden="true" />
+              <span className="stat-value">{stat.value ?? '\u2014'}</span>
+              <span className="stat-label">{stat.label}</span>
+            </Link>
+          ))}
+        </div>
+        <h3 className="subsection-heading">Recent activity</h3>
+        {recentMovements.ok && recentMovements.data.items.length > 0 ? (
+          <ul className="activity-list">
+            {recentMovements.data.items.map((movement) => (
+              <li key={movement.id}>
+                <span className={`badge ${movement.quantity < 0 ? 'offline' : 'online'}`}>
+                  <span />
+                  {movementTypeLabels[movement.type]}
+                </span>
+                <span className="activity-text">
+                  {movement.quantity > 0 ? `+${movement.quantity}` : movement.quantity}{' '}
+                  {movement.product.unit} &middot; {movement.product.name} at{' '}
+                  {movement.location.name}
+                </span>
+                <span className="activity-time">{formatTime(movement.createdAt)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted">Stock movements will appear here.</p>
+        )}
       </section>
       {admin && (
         <section className="workspace-section" aria-labelledby="members-heading">
