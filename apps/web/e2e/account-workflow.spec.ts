@@ -409,6 +409,15 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await page.getByRole('button', { name: 'Cancel order', exact: true }).click();
   await expect(page.getByText('Cancelled', { exact: true })).toBeVisible();
 
+  // The supplier price history lists the confirmed price with its source order.
+  await page.getByRole('link', { name: 'Suppliers', exact: true }).click();
+  await page.getByRole('link', { name: 'Nile Electronics', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Latest confirmed prices', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('cell', { name: '25.50 ETB', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'PO-0001', exact: true })).toBeVisible();
+
   await page.getByRole('link', { name: 'Locations', exact: true }).click();
   await page.getByRole('button', { name: 'New location', exact: true }).click();
   const storeDialog = page.getByRole('dialog', { name: 'New location', exact: true });

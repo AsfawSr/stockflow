@@ -155,7 +155,12 @@ export default async function SuppliersPage({
                   <tr key={supplier.id}>
                     <td>
                       <div className="member-name">
-                        <span>{supplier.name}</span>
+                        <Link
+                          className="text-link"
+                          href={`/workspace/${organization.id}/suppliers/${supplier.id}/prices`}
+                        >
+                          {supplier.name}
+                        </Link>
                         {supplier.contactName && <small>{supplier.contactName}</small>}
                         {supplier.address && <small>{supplier.address}</small>}
                       </div>
