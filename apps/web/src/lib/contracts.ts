@@ -324,6 +324,21 @@ export const orderLineInputSchema = z.object({
 export const rejectInputSchema = z.object({
   note: z.string().trim().min(1, 'Explain why the order is rejected.').max(1000),
 });
+export const supplierPriceListSchema = z.object({
+  items: z.array(
+    z.object({
+      product: orderProductSchema,
+      unitPrice: moneySchema,
+      reference: z.string().min(1),
+      decidedAt: z.iso.datetime(),
+    }),
+  ),
+});
+export type SupplierPrice = {
+  unitPrice: string;
+  reference: string;
+  decidedAt: string;
+};
 
 export const stockMovementTypeSchema = z.enum([
   'RECEIPT',

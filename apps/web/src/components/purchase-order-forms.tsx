@@ -10,7 +10,7 @@ import {
   removeOrderLineAction,
   transitionOrderAction,
 } from '@/app/actions';
-import type { FormState, PurchaseOrder } from '@/lib/contracts';
+import type { FormState, PurchaseOrder, SupplierPrice } from '@/lib/contracts';
 import { FieldError, FormFeedback, SubmitButton } from './form-controls';
 
 type Option = { id: string; label: string };
@@ -125,10 +125,12 @@ export function AddLineForm({
   organizationId,
   orderId,
   products,
+  prices = {},
 }: {
   organizationId: string;
   orderId: string;
   products: Option[];
+  prices?: Record<string, SupplierPrice>;
 }) {
   const [formKey, setFormKey] = useState(0);
   return (
@@ -137,6 +139,7 @@ export function AddLineForm({
       organizationId={organizationId}
       orderId={orderId}
       products={products}
+      prices={prices}
       onDone={() => setFormKey((key) => key + 1)}
     />
   );
@@ -146,17 +149,28 @@ function AddLineFields({
   organizationId,
   orderId,
   products,
+  prices,
   onDone,
 }: {
   organizationId: string;
   orderId: string;
   products: Option[];
+  prices: Record<string, SupplierPrice>;
   onDone: () => void;
 }) {
   const [state, action] = useActionState(addOrderLineAction, {} as FormState);
+  // Controlled fields survive the automatic form reset after a rejected submission.
+  const [productId, setProductId] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [unitPrice, setUnitPrice] = useState('');
   useEffect(() => {
     if (state.success) onDone();
   }, [state.success, onDone]);
+  const lastPrice = productId ? prices[productId] : undefined;
+  const formatDate = (date: string) =>
+    new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(
+      new Date(date),
+    );
   return (
     <form action={action} className="stacked-form add-line-form">
       <input type="hidden" name="organizationId" value={organizationId} />
@@ -165,7 +179,17 @@ function AddLineFields({
       <div className="add-line-grid">
         <div className="form-field">
           <label htmlFor="line-product">Product</label>
-          <select id="line-product" name="productId" defaultValue={state.values?.productId ?? ''}>
+          <select
+            id="line-product"
+            name="productId"
+            value={productId}
+            onChange={(event) => {
+              const next = event.target.value;
+              setProductId(next);
+              const known = prices[next];
+              if (known) setUnitPrice(known.unitPrice);
+            }}
+          >
             <option value="" disabled>
               Choose a product
             </option>
@@ -187,7 +211,8 @@ function AddLineFields({
             max={1000000}
             step={1}
             required
-            defaultValue={state.values?.quantity}
+            value={quantity}
+            onChange={(event) => setQuantity(event.target.value)}
           />
           <FieldError name="quantity" state={state} />
         </div>
@@ -200,8 +225,16 @@ function AddLineFields({
             required
             maxLength={13}
             placeholder="25.50"
-            defaultValue={state.values?.unitPrice}
+            value={unitPrice}
+            onChange={(event) => setUnitPrice(event.target.value)}
+            aria-describedby={lastPrice ? 'line-price-hint' : undefined}
           />
+          {lastPrice && (
+            <p id="line-price-hint" className="field-hint">
+              Last confirmed: {lastPrice.unitPrice} ({lastPrice.reference},{' '}
+              {formatDate(lastPrice.decidedAt)})
+            </p>
+          )}
           <FieldError name="unitPrice" state={state} />
         </div>
         <SubmitButton className="secondary-button add-line-submit" pendingText="Adding...">

@@ -15,6 +15,7 @@ import {
   organizationIdSchema,
   productListSchema,
   purchaseOrderSchema,
+  supplierPriceListSchema,
 } from '@/lib/contracts';
 import { authenticatedRequest, requireOrganization, requireUser } from '@/lib/session';
 
@@ -60,6 +61,26 @@ export default async function PurchaseOrderPage({
       )
     : null;
   if (products && !products.ok) throw new Error('The StockFlow API is unavailable.');
+  const supplierPrices =
+    purchaser && draft
+      ? await authenticatedRequest(
+          `/organizations/${organization.id}/suppliers/${order.supplier.id}/prices`,
+          supplierPriceListSchema,
+        )
+      : null;
+  const priceMap =
+    supplierPrices?.ok === true
+      ? Object.fromEntries(
+          supplierPrices.data.items.map((item) => [
+            item.product.id,
+            {
+              unitPrice: item.unitPrice,
+              reference: item.reference,
+              decidedAt: item.decidedAt,
+            },
+          ]),
+        )
+      : {};
 
   const formatDate = (date: string) =>
     new Intl.DateTimeFormat('en-GB', {
@@ -224,6 +245,7 @@ export default async function PurchaseOrderPage({
               id: product.id,
               label: `${product.sku} · ${product.name}`,
             }))}
+            prices={priceMap}
           />
         )}
       </section>

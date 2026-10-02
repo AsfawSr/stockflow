@@ -390,6 +390,25 @@ test('account access, cookie privacy, organization selection, and revoked permis
   );
   expect(stock.rows).toEqual([{ quantity: 10 }]);
 
+  // A new order for the same supplier pre-fills the last confirmed price.
+  await page.getByRole('link', { name: 'Purchase orders', exact: true }).click();
+  await page.getByRole('button', { name: 'New order', exact: true }).click();
+  await orderDialog
+    .getByLabel('Supplier', { exact: true })
+    .selectOption({ label: 'Nile Electronics' });
+  await orderDialog
+    .getByLabel('Deliver to', { exact: true })
+    .selectOption({ label: 'Main Warehouse' });
+  await orderDialog.getByRole('button', { name: 'Create draft', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'PO-0002', exact: true })).toBeVisible();
+  await page
+    .getByLabel('Product', { exact: true })
+    .selectOption({ label: 'USB-C_65W.01 · USB-C Charger 65W' });
+  await expect(page.getByLabel('Unit price', { exact: true })).toHaveValue('25.50');
+  await expect(page.getByText('Last confirmed: 25.50 (PO-0001', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel order', exact: true }).click();
+  await expect(page.getByText('Cancelled', { exact: true })).toBeVisible();
+
   await page.getByRole('link', { name: 'Locations', exact: true }).click();
   await page.getByRole('button', { name: 'New location', exact: true }).click();
   const storeDialog = page.getByRole('dialog', { name: 'New location', exact: true });

@@ -8,9 +8,29 @@ import {
   purchaseOrderListSchema,
   purchaseOrderSchema,
   rejectInputSchema,
+  supplierPriceListSchema,
 } from '../src/lib/contracts';
 
 const uuid = '8ed13b94-fd8b-4079-848e-f22edaa8ce05';
+
+test('validates supplier price lists with strict money strings', () => {
+  const item = {
+    product: { id: uuid, sku: 'CHARGER-65', name: 'USB-C Charger', unit: 'piece' },
+    unitPrice: '12.50',
+    reference: 'PO-0002',
+    decidedAt: new Date().toISOString(),
+  };
+  assert.equal(supplierPriceListSchema.safeParse({ items: [item] }).success, true);
+  assert.equal(supplierPriceListSchema.safeParse({ items: [] }).success, true);
+  assert.equal(
+    supplierPriceListSchema.safeParse({ items: [{ ...item, unitPrice: '12.5' }] }).success,
+    false,
+  );
+  assert.equal(
+    supplierPriceListSchema.safeParse({ items: [{ ...item, reference: '' }] }).success,
+    false,
+  );
+});
 
 test('validates order creation input', () => {
   assert.deepEqual(
