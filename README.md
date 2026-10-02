@@ -229,7 +229,9 @@ cover the remaining hand-entered movements.
 | Method | Path | Behavior |
 | --- | --- | --- |
 | GET | `/levels` | On-hand quantity per product and location with a `low` flag; filter by location or `low=true`, search by product name or SKU, paginated. |
+| GET | `/levels/export` | The same report as CSV (`text/csv` attachment, up to 10,000 rows, same filters). |
 | GET | `/movements` | Full movement history, newest first, with a human-readable detail per entry; filter by product or location. |
+| GET | `/movements/export` | The history as CSV with the same filters; fields with commas, quotes, or line breaks are escaped. |
 | POST | `/transfers` | Move a positive quantity between two different locations; optional note. |
 | POST | `/adjustments` | Positive or negative correction with a required reason; zero is rejected. |
 
@@ -393,6 +395,9 @@ launch, add a durable mail queue, retry/monitoring, and appropriate abuse contro
 - `/organizations` lists only current memberships, supports name search, and creates
 	organizations with a currency selected from the platform's supported currencies.
 - `/workspace/:organizationId` shows the real organization and current roles.
+	Every member sees the workspace pulse: on-hand balance, low-stock, and
+	awaiting-approval counts that link to the filtered screens, plus the five most
+	recent stock movements.
 	Admins can rename the organization and inspect its members; other members cannot.
 	Admins also invite members by email with a role set, see pending invitations with
 	their expiry, and revoke them; `/invitations/accept` lets a signed-in, verified
@@ -410,7 +415,11 @@ launch, add a durable mail queue, retry/monitoring, and appropriate abuse contro
   point; balances at or below it show a Low badge. Admins and warehouse members
   record transfers and adjustments through dialogs whose fields are controlled state,
   so a rejected submission (such as insufficient stock) keeps the entered values;
-  other members see a read-only report.- `/status` remains public and displays web, API, and PostgreSQL health.
+  other members see a read-only report. `/stock/movements` is the full paginated
+  history with product and location filters, and both screens offer CSV export:
+  the browser downloads through a Next.js route handler that forwards the request
+  to the API with the server-held session token, so bearer tokens never reach the
+  client.- `/status` remains public and displays web, API, and PostgreSQL health.
 - `/verify-email` gates unverified accounts; `/verify-email/confirm` consumes email links.
 - `/forgot-password` requests recovery; `/reset-password` accepts a new password from a valid link.
 
@@ -678,9 +687,11 @@ Milestone 9 finishes the operational checklist: mail delivery health is
 monitored at `/api/health/mail` and on the status page, member and invitation
 lists are paginated end to end, and a Caddy TLS ingress with automatic
 certificates fronts the compose stack as its only published entry point.
-Possible next steps are feature work: dashboard widgets, a full stock movement
-history screen, CSV exports, and procurement depth such as reorder suggestions
-and supplier price history.
+Milestone 10 rounds out day-to-day visibility: a workspace pulse dashboard with
+live counts and recent activity, a full paginated stock movement history with
+filters, and CSV exports for levels and movements proxied through the web
+session. Possible next steps: procurement depth such as reorder suggestions and
+supplier price history, or revise-and-resubmit for rejected orders.
 
 ## Commit Workflow
 
