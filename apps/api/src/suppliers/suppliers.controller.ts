@@ -38,6 +38,15 @@ export class SuppliersController {
     return this.suppliers.get(organizationId, supplierId);
   }
 
+  @Get(':supplierId/prices')
+  @Header('Cache-Control', 'no-store')
+  prices(
+    @Param('organizationId') organizationId: string,
+    @Param('supplierId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) supplierId: string,
+  ) {
+    return this.suppliers.prices(organizationId, supplierId);
+  }
+
   @Post()
   @Roles('ADMIN', 'PURCHASER')
   @Header('Cache-Control', 'no-store')

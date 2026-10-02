@@ -65,6 +65,41 @@ export class SuppliersService {
     return supplier;
   }
 
+  // Latest confirmed unit price per product, derived from approved order history.
+  async prices(organizationId: string, supplierId: string) {
+    await this.get(organizationId, supplierId);
+    const rows = (await this.prisma.$queryRaw`
+      SELECT DISTINCT ON (l.product_id)
+        p.id AS product_id, p.sku, p.name, p.unit,
+        l.unit_price, o.number, o.decided_at
+      FROM purchase_order_lines l
+      JOIN purchase_orders o ON o.id = l.purchase_order_id
+      JOIN products p ON p.organization_id = l.organization_id AND p.id = l.product_id
+      WHERE o.organization_id = ${organizationId}::uuid
+        AND o.supplier_id = ${supplierId}::uuid
+        AND o.status::text IN ('APPROVED', 'PARTIALLY_RECEIVED', 'RECEIVED')
+      ORDER BY l.product_id, o.decided_at DESC, l.id DESC
+    `) as {
+      product_id: string;
+      sku: string;
+      name: string;
+      unit: string;
+      unit_price: string;
+      number: number;
+      decided_at: Date;
+    }[];
+    return {
+      items: rows
+        .map((row) => ({
+          product: { id: row.product_id, sku: row.sku, name: row.name, unit: row.unit },
+          unitPrice: new Prisma.Decimal(row.unit_price).toFixed(2),
+          reference: `PO-${String(row.number).padStart(4, '0')}`,
+          decidedAt: row.decided_at,
+        }))
+        .sort((left, right) => left.product.name.localeCompare(right.product.name)),
+    };
+  }
+
   async create(organizationId: string, input: CreateSupplierDto) {
     try {
       return await this.prisma.supplier.create({

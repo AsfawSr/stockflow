@@ -142,7 +142,8 @@ describe('Expired record cleanup against PostgreSQL', () => {
       const first = await storage.increment(key, 60000, 3, 0, 'default');
       expect(first).toMatchObject({ totalHits: 1, isBlocked: false, timeToBlockExpire: 0 });
       expect(first.timeToExpire).toBeGreaterThanOrEqual(1);
-      expect(first.timeToExpire).toBeLessThanOrEqual(60);
+      // CEIL over float epoch extraction can land on 61 for an exactly-60s window.
+      expect(first.timeToExpire).toBeLessThanOrEqual(61);
 
       // Parallel hits across "processes" never lose a count.
       const burst = await Promise.all(

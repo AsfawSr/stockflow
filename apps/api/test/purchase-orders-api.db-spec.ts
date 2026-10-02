@@ -680,4 +680,108 @@ describe('Purchase order workflow against PostgreSQL', () => {
       await app.close();
     }
   }, 60000);
+
+  it('reports the latest confirmed supplier prices for order pre-fill', async () => {
+    await withApplication(async (app, database) => {
+      const owner = await registerVerified(app);
+      const seed = await seedOrganization(app, owner.auth);
+      const base = `/api/organizations/${seed.organizationId}/purchase-orders`;
+      const pricesUrl = `/api/organizations/${seed.organizationId}/suppliers/${seed.supplierId}/prices`;
+      const getPrices = (auth = owner.auth) =>
+        request(app.getHttpServer()).get(pricesUrl).set('Authorization', auth);
+      const createOrder = async () => {
+        const created = await request(app.getHttpServer())
+          .post(base)
+          .set('Authorization', owner.auth)
+          .send({ supplierId: seed.supplierId, locationId: seed.locationId })
+          .expect(201);
+        return created.body.id as string;
+      };
+      const addLine = (orderId: string, productId: string, unitPrice: string) =>
+        request(app.getHttpServer())
+          .post(`${base}/${orderId}/lines`)
+          .set('Authorization', owner.auth)
+          .send({ productId, quantity: 5, unitPrice })
+          .expect(201);
+      const transition = (orderId: string, action: string, body: object = {}) =>
+        request(app.getHttpServer())
+          .post(`${base}/${orderId}/${action}`)
+          .set('Authorization', owner.auth)
+          .send(body)
+          .expect(200);
+
+      const empty = await getPrices().expect(200);
+      expect(empty.body.items).toEqual([]);
+
+      const first = await createOrder();
+      await addLine(first, seed.chargerId, '10');
+      expect((await getPrices().expect(200)).body.items).toEqual([]);
+      await transition(first, 'submit');
+      expect((await getPrices().expect(200)).body.items).toEqual([]);
+      await transition(first, 'approve');
+      const confirmed = await getPrices().expect(200);
+      expect(confirmed.body.items).toEqual([
+        {
+          product: { id: seed.chargerId, sku: 'CHARGER-65', name: 'USB-C Charger', unit: 'piece' },
+          unitPrice: '10.00',
+          reference: 'PO-0001',
+          decidedAt: expect.any(String),
+        },
+      ]);
+
+      const second = await createOrder();
+      await addLine(second, seed.chargerId, '12.50');
+      await addLine(second, seed.cableId, '5');
+      await transition(second, 'submit');
+      await transition(second, 'approve');
+      // Deterministic recency regardless of approval timestamps sharing a millisecond.
+      await database.purchaseOrder.update({
+        where: { id: first },
+        data: { decidedAt: new Date(Date.now() - 3600000) },
+      });
+      const latest = await getPrices().expect(200);
+      expect(
+        latest.body.items.map(
+          (item: { product: { sku: string }; unitPrice: string; reference: string }) => [
+            item.product.sku,
+            item.unitPrice,
+            item.reference,
+          ],
+        ),
+      ).toEqual([
+        ['CABLE-2M', '5.00', 'PO-0002'],
+        ['CHARGER-65', '12.50', 'PO-0002'],
+      ]);
+
+      // Rejected negotiations never overwrite confirmed prices.
+      const third = await createOrder();
+      await addLine(third, seed.chargerId, '99.99');
+      await transition(third, 'submit');
+      await transition(third, 'reject', { note: 'Too expensive' });
+      const afterReject = await getPrices().expect(200);
+      expect(
+        afterReject.body.items.find(
+          (item: { product: { sku: string } }) => item.product.sku === 'CHARGER-65',
+        ).unitPrice,
+      ).toBe('12.50');
+
+      await request(app.getHttpServer()).get(pricesUrl).expect(401);
+      const outsider = await registerVerified(app);
+      await getPrices(outsider.auth).expect(404);
+      await request(app.getHttpServer())
+        .get(`/api/organizations/${seed.organizationId}/suppliers/${randomUUID()}/prices`)
+        .set('Authorization', owner.auth)
+        .expect(404);
+      const otherSupplier = await request(app.getHttpServer())
+        .post(`/api/organizations/${seed.organizationId}/suppliers`)
+        .set('Authorization', owner.auth)
+        .send({ name: 'Second Supplier' })
+        .expect(201);
+      const otherPrices = await request(app.getHttpServer())
+        .get(`/api/organizations/${seed.organizationId}/suppliers/${otherSupplier.body.id}/prices`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      expect(otherPrices.body.items).toEqual([]);
+    });
+  }, 60000);
 });
