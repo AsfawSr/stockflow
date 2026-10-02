@@ -97,6 +97,13 @@ export default async function StockPage({
     const suffix = linkQuery.toString();
     return `/workspace/${organization.id}/stock${suffix ? `?${suffix}` : ''}`;
   };
+  const exportQuery = new URLSearchParams();
+  if (query.location) exportQuery.set('location', query.location);
+  if (query.show === 'low') exportQuery.set('show', 'low');
+  if (query.search) exportQuery.set('search', query.search);
+  const exportHref = `/workspace/${organization.id}/stock/export/levels${
+    exportQuery.toString() ? `?${exportQuery}` : ''
+  }`;
 
   return (
     <AppShell user={user} organization={organization} section="Stock">
@@ -151,6 +158,9 @@ export default async function StockPage({
           <button type="submit" className="secondary-button">
             Apply
           </button>
+          <a className="secondary-button" href={exportHref} download>
+            Export CSV
+          </a>
         </div>
       </form>
 

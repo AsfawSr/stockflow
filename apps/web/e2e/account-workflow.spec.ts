@@ -492,6 +492,20 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await expect(page.locator('tbody tr')).toHaveCount(1);
   await expect(page.getByRole('cell', { name: 'Transfer in', exact: true })).toBeVisible();
 
+  // CSV exports stream through the web session without exposing the API token.
+  await expect(page.getByRole('link', { name: 'Export CSV', exact: true })).toBeVisible();
+  const levelsCsv = await context.request.get(`/workspace/${firstId}/stock/export/levels`);
+  expect(levelsCsv.status()).toBe(200);
+  expect(levelsCsv.headers()['content-type']).toContain('text/csv');
+  const levelsCsvText = await levelsCsv.text();
+  expect(
+    levelsCsvText.startsWith('sku,product,location,quantity,unit,reorder_point,low,updated_at'),
+  ).toBe(true);
+  expect(levelsCsvText).toContain('USB-C_65W.01,USB-C Charger 65W,Retail Store,4,piece,4,true');
+  const movementsCsv = await context.request.get(`/workspace/${firstId}/stock/export/movements`);
+  expect(movementsCsv.status()).toBe(200);
+  expect((await movementsCsv.text()).split('\r\n').filter(Boolean)).toHaveLength(6);
+
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
 

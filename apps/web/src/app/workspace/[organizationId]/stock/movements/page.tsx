@@ -75,6 +75,12 @@ export default async function StockMovementsPage({
     const suffix = linkQuery.toString();
     return `/workspace/${organization.id}/stock/movements${suffix ? `?${suffix}` : ''}`;
   };
+  const exportQuery = new URLSearchParams();
+  if (query.product) exportQuery.set('product', query.product);
+  if (query.location) exportQuery.set('location', query.location);
+  const exportHref = `/workspace/${organization.id}/stock/export/movements${
+    exportQuery.toString() ? `?${exportQuery}` : ''
+  }`;
 
   return (
     <AppShell user={user} organization={organization} section="Stock">
@@ -111,6 +117,9 @@ export default async function StockMovementsPage({
           <button type="submit" className="secondary-button">
             Apply
           </button>
+          <a className="secondary-button" href={exportHref} download>
+            Export CSV
+          </a>
         </div>
       </form>
 
