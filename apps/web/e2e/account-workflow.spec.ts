@@ -481,6 +481,17 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await expect(levelsTable.getByRole('row', { name: /Retail Store/ })).toBeVisible();
   await expect(levelsTable.getByRole('row', { name: /Main Warehouse/ })).toHaveCount(0);
 
+  // The full movement history pages and filters by location.
+  await page.getByRole('link', { name: 'View all movements', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Stock movements', exact: true })).toBeVisible();
+  // Two partial deliveries, a transfer pair, and one adjustment.
+  await expect(page.getByText('5 movements', { exact: false })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Damaged unit', exact: true })).toBeVisible();
+  await page.getByLabel('Location', { exact: true }).selectOption({ label: 'Retail Store' });
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await expect(page.getByRole('cell', { name: 'Transfer in', exact: true })).toBeVisible();
+
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
 

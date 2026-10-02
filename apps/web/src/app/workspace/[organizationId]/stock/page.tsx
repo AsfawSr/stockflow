@@ -229,7 +229,12 @@ export default async function StockPage({
       )}
 
       <section aria-labelledby="movements-heading" className="receipt-history">
-        <h2 id="movements-heading">Recent movements</h2>
+        <div className="section-heading">
+          <h2 id="movements-heading">Recent movements</h2>
+          <Link href={`/workspace/${organization.id}/stock/movements`} className="secondary-button">
+            View all movements
+          </Link>
+        </div>
         {movements.data.items.length === 0 ? (
           <p className="muted">Deliveries, transfers, and adjustments will appear here.</p>
         ) : (
