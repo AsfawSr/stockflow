@@ -10,10 +10,61 @@ import {
 
 const productSelect = { id: true, sku: true, name: true, unit: true, reorderPoint: true } as const;
 const locationSelect = { id: true, name: true } as const;
+const EXPORT_ROW_LIMIT = 10000;
+
+function csv(rows: (string | number | null)[][]): string {
+  const escape = (value: string | number | null) => {
+    const text = value === null ? '' : String(value);
+    return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  return rows.map((row) => row.map(escape).join(',')).join('\r\n') + '\r\n';
+}
 
 @Injectable()
 export class StockService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async levelsCsv(organizationId: string, query: StockLevelsQueryDto) {
+    const { items } = await this.levels(organizationId, {
+      ...query,
+      page: 1,
+      pageSize: EXPORT_ROW_LIMIT,
+    });
+    return csv([
+      ['sku', 'product', 'location', 'quantity', 'unit', 'reorder_point', 'low', 'updated_at'],
+      ...items.map((level) => [
+        level.product.sku,
+        level.product.name,
+        level.location.name,
+        level.quantity,
+        level.product.unit,
+        level.product.reorderPoint,
+        level.low ? 'true' : 'false',
+        level.updatedAt.toISOString(),
+      ]),
+    ]);
+  }
+
+  async movementsCsv(organizationId: string, query: StockMovementsQueryDto) {
+    const { items } = await this.movements(organizationId, {
+      ...query,
+      page: 1,
+      pageSize: EXPORT_ROW_LIMIT,
+    });
+    return csv([
+      ['type', 'sku', 'product', 'location', 'quantity', 'detail', 'recorded_by', 'created_at'],
+      ...items.map((movement) => [
+        movement.type,
+        movement.product.sku,
+        movement.product.name,
+        movement.location.name,
+        movement.quantity,
+        movement.detail,
+        movement.createdBy.displayName,
+        movement.createdAt.toISOString(),
+      ]),
+    ]);
+  }
 
   async levels(organizationId: string, query: StockLevelsQueryDto) {
     const page = query.page ?? 1;

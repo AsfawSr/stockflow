@@ -254,6 +254,37 @@ describe('Stock APIs against PostgreSQL', () => {
         .set('Authorization', owner.auth)
         .expect(200);
       expect(lowSearched.body.items).toHaveLength(1);
+
+      // CSV exports mirror the reports and escape embedded commas and quotes.
+      await request(app.getHttpServer())
+        .post(`${base}/adjustments`)
+        .set('Authorization', owner.auth)
+        .send({ productId, locationId: mainId, quantity: 1, reason: 'Cycle count, "aisle 3"' })
+        .expect(201);
+      const levelsExport = await request(app.getHttpServer())
+        .get(`${base}/levels/export`)
+        .set('Authorization', owner.auth)
+        .expect(200)
+        .expect('Content-Type', /text\/csv/)
+        .expect('Content-Disposition', /attachment; filename="stock-levels\.csv"/);
+      const levelLines = (levelsExport.text as string).trim().split('\r\n');
+      expect(levelLines[0]).toBe('sku,product,location,quantity,unit,reorder_point,low,updated_at');
+      expect(levelLines).toHaveLength(3);
+      expect(levelLines[1]).toContain('STOCK-01,Stock Product,Main Warehouse,6,piece,4,false');
+      expect(levelLines[2]).toContain('STOCK-01,Stock Product,Retail Store,4,piece,4,true');
+      const movementsExport = await request(app.getHttpServer())
+        .get(`${base}/movements/export?locationId=${storeId}`)
+        .set('Authorization', owner.auth)
+        .expect(200)
+        .expect('Content-Type', /text\/csv/);
+      const movementLines = (movementsExport.text as string).trim().split('\r\n');
+      expect(movementLines).toHaveLength(2);
+      expect(movementLines[1]).toContain('TRANSFER_IN,STOCK-01');
+      const escaped = await request(app.getHttpServer())
+        .get(`${base}/movements/export?locationId=${mainId}`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      expect(escaped.text).toContain('"Cycle count, ""aisle 3"""');
     });
   }, 60000);
 
@@ -345,6 +376,10 @@ describe('Stock APIs against PostgreSQL', () => {
       await request(app.getHttpServer()).get(`${base}/levels`).expect(401);
       await request(app.getHttpServer())
         .get(`${base}/levels`)
+        .set('Authorization', outsider.auth)
+        .expect(404);
+      await request(app.getHttpServer())
+        .get(`${base}/levels/export`)
         .set('Authorization', outsider.auth)
         .expect(404);
       await request(app.getHttpServer())

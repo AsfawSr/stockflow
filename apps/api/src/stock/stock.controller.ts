@@ -32,6 +32,17 @@ export class StockController {
     return this.stock.levels(organizationId, query);
   }
 
+  @Get('levels/export')
+  @Header('Cache-Control', 'no-store')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="stock-levels.csv"')
+  levelsExport(
+    @Param('organizationId') organizationId: string,
+    @Query() query: StockLevelsQueryDto,
+  ) {
+    return this.stock.levelsCsv(organizationId, query);
+  }
+
   @Get('movements')
   @Header('Cache-Control', 'no-store')
   movements(
@@ -39,6 +50,17 @@ export class StockController {
     @Query() query: StockMovementsQueryDto,
   ) {
     return this.stock.movements(organizationId, query);
+  }
+
+  @Get('movements/export')
+  @Header('Cache-Control', 'no-store')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="stock-movements.csv"')
+  movementsExport(
+    @Param('organizationId') organizationId: string,
+    @Query() query: StockMovementsQueryDto,
+  ) {
+    return this.stock.movementsCsv(organizationId, query);
   }
 
   @Post('transfers')
