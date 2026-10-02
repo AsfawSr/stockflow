@@ -161,6 +161,14 @@ only, matching the role model where administrators manage company settings and
 purchasing officers manage supplier relationships. `MANAGER` manages products
 but neither suppliers nor locations.
 
+`GET .../suppliers/:supplierId/prices` reports the latest confirmed unit price
+per product for one supplier, derived from order history rather than a separate
+price table: only orders that reached `APPROVED`, `PARTIALLY_RECEIVED`, or
+`RECEIVED` count, with the most recent approval winning. Draft, submitted,
+rejected, and cancelled negotiations never surface. Each entry carries the
+source order reference and approval date. The tests cover recency, exclusion of
+unconfirmed states, per-supplier isolation, and tenant isolation.
+
 ## Purchase Order and Stock Ledger Model
 
 The sixth migration adds the procurement workflow and the beginning of the stock
@@ -408,7 +416,10 @@ launch, add a durable mail queue, retry/monitoring, and appropriate abuse contro
   archive, and restore products through dialogs; other members see a read-only list.
   Search, filter, and paging run server-side through GET parameters, so catalog URLs
   are shareable. Product mutations are server actions that revalidate the list, map
-  duplicate SKUs to a clear message, and never expose other organizations' data.- `/workspace/:organizationId/stock` shows on-hand balances per product and location
+  duplicate SKUs to a clear message, and never expose other organizations' data.- Supplier names on `/workspace/:organizationId/suppliers` link to a per-supplier
+  price history screen, and draft order lines pre-fill the unit price from the
+  supplier's last confirmed order with a provenance hint the purchaser can
+  override.- `/workspace/:organizationId/stock` shows on-hand balances per product and location
   with a location filter, product search, a low-stock filter, and pagination, plus
   the latest movement
   history with type badges and human-readable details. Products can carry a reorder
@@ -690,8 +701,11 @@ certificates fronts the compose stack as its only published entry point.
 Milestone 10 rounds out day-to-day visibility: a workspace pulse dashboard with
 live counts and recent activity, a full paginated stock movement history with
 filters, and CSV exports for levels and movements proxied through the web
-session. Possible next steps: procurement depth such as reorder suggestions and
-supplier price history, or revise-and-resubmit for rejected orders.
+session. Milestone 11 adds supplier price memory: the latest confirmed price
+per product is derived from approved order history, shown on a per-supplier
+price screen, and pre-filled with a provenance hint when adding draft order
+lines. Possible next steps: reorder suggestions from the low-stock data, or
+revise-and-resubmit for rejected orders.
 
 ## Commit Workflow
 
