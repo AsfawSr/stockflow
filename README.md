@@ -319,6 +319,26 @@ unique constraint is the final guard. The tests cover the invite-accept
 lifecycle, replacement, expiry, mismatch, revocation, admin-only management,
 tenant isolation, and committed-data concurrent accepts.
 
+## Audit Log
+
+Every consequential workspace action leaves a row in `audit_events`: purchase
+order transitions (created, submitted, approved, rejected, cancelled, revised,
+received), stock transfers and adjustments, invitations (created, revoked,
+accepted), and member changes (roles changed, removed). Each event stores the
+organization, the acting user, a stable `action` code, the entity type and id,
+a human-readable summary, and a timestamp. Audit writes are best effort — a
+failed insert logs a warning but never fails the action it describes — and the
+actor reference is `SET NULL` on user deletion so history outlives accounts,
+while the organization reference is `RESTRICT` so history cannot be orphaned.
+
+`GET /organizations/:organizationId/audit` serves the log to administrators
+only (other members get 403, outsiders 404), newest first with the standard
+`page`/`pageSize` pagination. The workspace overview links admins to a
+read-only audit screen with the summary, actor, and action code per event.
+Tests cover event recording across all instrumented flows, ordering,
+pagination, role enforcement, and tenant isolation, plus database constraints
+for non-blank fields and the two deletion behaviors.
+
 ## Authentication API
 
 All endpoints are under `/api`. Routes require a bearer session by default;
@@ -746,9 +766,11 @@ verdict. Milestone 14 completes the restocking shortcut: a one-click dialog on
 the suggestions screen creates a pre-filled draft order for the suggested
 quantity at the last confirmed price. Milestone 15 reaches outside the team:
 approving an order emails it to the supplier contact through the monitored
-mail transport, without ever blocking the approval itself. Possible next
-steps: an audit log of workspace activity, or org-level settings for the
-order email sender identity.
+mail transport, without ever blocking the approval itself. Milestone 16 adds
+accountability: order transitions, stock movements, invitations, and member
+changes are recorded in a tenant-scoped audit log that administrators browse
+from the workspace overview. Possible next steps: org-level settings for the
+order email sender identity, or product cost and valuation reporting.
 
 ## Commit Workflow
 
