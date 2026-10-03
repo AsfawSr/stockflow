@@ -48,6 +48,13 @@ export class OrganizationsController {
     return this.organizations.get(request.principal.user.id, organizationId);
   }
 
+  @Get(':organizationId/trends')
+  @UseGuards(OrganizationAccessGuard)
+  @Header('Cache-Control', 'no-store')
+  trends(@Param('organizationId') organizationId: string) {
+    return this.organizations.trends(organizationId);
+  }
+
   @Patch(':organizationId')
   @UseGuards(OrganizationAccessGuard)
   @Roles('ADMIN')

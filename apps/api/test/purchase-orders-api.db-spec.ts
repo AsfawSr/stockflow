@@ -1335,4 +1335,93 @@ describe('Purchase order workflow against PostgreSQL', () => {
         .expect(404);
     });
   }, 60000);
+
+  it('reports eight weeks of workspace activity trends', async () => {
+    await withApplication(async (app, database) => {
+      const owner = await registerVerified(app);
+      const seed = await seedOrganization(app, owner.auth);
+      const base = `/api/organizations/${seed.organizationId}/purchase-orders`;
+      const trendsUrl = `/api/organizations/${seed.organizationId}/trends`;
+      const getTrends = (auth = owner.auth) =>
+        request(app.getHttpServer()).get(trendsUrl).set('Authorization', auth);
+      const monday = new Date();
+      const today = new Date(
+        Date.UTC(monday.getUTCFullYear(), monday.getUTCMonth(), monday.getUTCDate()),
+      );
+      today.setUTCDate(today.getUTCDate() - ((today.getUTCDay() || 7) - 1));
+      const currentWeek = today.toISOString().slice(0, 10);
+
+      const fresh = await getTrends().expect(200);
+      expect(fresh.body.weeks).toHaveLength(8);
+      expect(fresh.body.weeks[7].weekStart).toBe(currentWeek);
+      const starts = fresh.body.weeks.map((week: { weekStart: string }) => week.weekStart);
+      expect([...starts].sort()).toEqual(starts);
+      for (const week of fresh.body.weeks) {
+        expect(week).toMatchObject({ ordersCreated: 0, unitsReceived: 0, movements: 0 });
+      }
+
+      // One received order, one idle draft, and a correction, all this week.
+      const draft = await request(app.getHttpServer())
+        .post(base)
+        .set('Authorization', owner.auth)
+        .send({ supplierId: seed.supplierId, locationId: seed.locationId })
+        .expect(201);
+      const line = await request(app.getHttpServer())
+        .post(`${base}/${draft.body.id}/lines`)
+        .set('Authorization', owner.auth)
+        .send({ productId: seed.chargerId, quantity: 6, unitPrice: '2.00' })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post(`${base}/${draft.body.id}/submit`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      await request(app.getHttpServer())
+        .post(`${base}/${draft.body.id}/approve`)
+        .set('Authorization', owner.auth)
+        .send({})
+        .expect(200);
+      await request(app.getHttpServer())
+        .post(`${base}/${draft.body.id}/receipts`)
+        .set('Authorization', owner.auth)
+        .send({ lines: [{ purchaseOrderLineId: line.body.lines[0].id, quantity: 6 }] })
+        .expect(201);
+      const idle = await request(app.getHttpServer())
+        .post(base)
+        .set('Authorization', owner.auth)
+        .send({ supplierId: seed.supplierId, locationId: seed.locationId })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post(`/api/organizations/${seed.organizationId}/stock/adjustments`)
+        .set('Authorization', owner.auth)
+        .send({
+          productId: seed.chargerId,
+          locationId: seed.locationId,
+          quantity: -2,
+          reason: 'Recount',
+        })
+        .expect(201);
+
+      const active = await getTrends().expect(200);
+      expect(active.body.weeks[7]).toEqual({
+        weekStart: currentWeek,
+        ordersCreated: 2,
+        unitsReceived: 6,
+        movements: 2,
+      });
+
+      // Backdating shifts the order into an earlier bucket without losing it.
+      await database.$executeRaw`
+        UPDATE purchase_orders SET created_at = created_at - interval '14 days'
+        WHERE id = ${idle.body.id}::uuid
+      `;
+      const shifted = await getTrends().expect(200);
+      expect(shifted.body.weeks[7].ordersCreated).toBe(1);
+      expect(shifted.body.weeks[5].ordersCreated).toBe(1);
+      expect(shifted.body.weeks[5].movements).toBe(0);
+
+      await request(app.getHttpServer()).get(trendsUrl).expect(401);
+      const outsider = await registerVerified(app);
+      await getTrends(outsider.auth).expect(404);
+    });
+  }, 60000);
 });

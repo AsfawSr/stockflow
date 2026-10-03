@@ -53,6 +53,44 @@ export class OrganizationsService {
     return { ...membership.organization, roles: membership.roles };
   }
 
+  // Eight ISO weeks of activity, oldest first, with empty weeks kept as zeros.
+  async trends(organizationId: string) {
+    const rows = (await this.prisma.$queryRaw`
+      WITH weeks AS (
+        SELECT (date_trunc('week', (now() AT TIME ZONE 'UTC'))::date - (n * 7)) AS week_start
+        FROM generate_series(0, 7) AS n
+      )
+      SELECT w.week_start,
+        (SELECT COUNT(*)::int FROM purchase_orders o
+          WHERE o.organization_id = ${organizationId}::uuid
+            AND date_trunc('week', (o.created_at AT TIME ZONE 'UTC'))::date = w.week_start)
+          AS orders_created,
+        (SELECT COALESCE(SUM(m.quantity), 0)::int FROM stock_movements m
+          WHERE m.organization_id = ${organizationId}::uuid AND m.type::text = 'RECEIPT'
+            AND date_trunc('week', (m.created_at AT TIME ZONE 'UTC'))::date = w.week_start)
+          AS units_received,
+        (SELECT COUNT(*)::int FROM stock_movements m
+          WHERE m.organization_id = ${organizationId}::uuid
+            AND date_trunc('week', (m.created_at AT TIME ZONE 'UTC'))::date = w.week_start)
+          AS movements
+      FROM weeks w
+      ORDER BY w.week_start ASC
+    `) as {
+      week_start: Date;
+      orders_created: number;
+      units_received: number;
+      movements: number;
+    }[];
+    return {
+      weeks: rows.map((row) => ({
+        weekStart: row.week_start.toISOString().slice(0, 10),
+        ordersCreated: row.orders_created,
+        unitsReceived: row.units_received,
+        movements: row.movements,
+      })),
+    };
+  }
+
   async rename(userId: string, organizationId: string, input: RenameOrganizationDto) {
     try {
       return await this.prisma.organization.update({
