@@ -486,7 +486,10 @@ launch, add a durable mail queue, retry/monitoring, and appropriate abuse contro
 - `/workspace/:organizationId` shows the real organization and current roles.
 	Every member sees the workspace pulse: on-hand balance, low-stock, and
 	awaiting-approval counts that link to the filtered screens, plus the five most
-	recent stock movements.
+	recent stock movements and a weekly activity table — eight ISO weeks of new
+	orders, received units, and movement counts from
+	`GET /organizations/:organizationId/trends`, with empty weeks kept as zeros so
+	quiet periods are visible rather than skipped.
 	Admins can rename the organization and inspect its members; other members cannot.
 	Admins also invite members by email with a role set, see pending invitations with
 	their expiry, and revoke them; `/invitations/accept` lets a signed-in, verified
@@ -805,8 +808,10 @@ open order counts, the unit fill rate, and the average approval-to-delivery
 lead time, all derived from existing order history. Milestone 19 adds a
 printable purchase order document — a standalone print view with supplier and
 delivery details rendered for the browser's print-to-PDF, with no server-side
-PDF dependency. Possible next steps: org-level settings for the order email
-sender identity, or dashboard trends over time.
+PDF dependency. Milestone 20 adds time to the dashboard: the overview shows an
+eight-week activity table of new orders, received units, and stock movements,
+bucketed by ISO week in UTC. Possible next steps: org-level settings for the
+order email sender identity, or archiving entire organizations.
 
 ## Commit Workflow
 
