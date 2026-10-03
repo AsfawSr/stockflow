@@ -58,6 +58,7 @@ model Organization {
   locations   Location[]
   purchaseOrders PurchaseOrder[]
   invitations Invitation[]
+  auditEvents AuditEvent[]
 
   @@map("organizations")
 }
@@ -296,6 +297,7 @@ model User {
   stockTransfers StockTransfer[] @relation("StockTransferCreatedBy")
   stockAdjustments StockAdjustment[] @relation("StockAdjustmentCreatedBy")
   sentInvitations Invitation[] @relation("InvitationInvitedBy")
+  auditEvents AuditEvent[] @relation("AuditEventActor")
 
   @@map("users")
 }
@@ -379,4 +381,20 @@ model RateLimit {
 
   @@index([expiresAt])
   @@map("rate_limits")
+}
+
+model AuditEvent {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  actorId        String?      @map("actor_id") @db.Uuid
+  action         String       @db.VarChar(80)
+  entityType     String       @map("entity_type") @db.VarChar(40)
+  entityId       String?      @map("entity_id") @db.Uuid
+  summary        String       @db.VarChar(400)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  actor          User?        @relation("AuditEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt(sort: Desc), id])
+  @@map("audit_events")
 }
