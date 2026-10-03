@@ -13,7 +13,10 @@ const renamed = `${firstName} Updated`;
 const longName = `Browser ${runId.slice(0, 8)} ${'Warehouse'.repeat(14)}`;
 const organizationIds: string[] = [];
 const mailDirectory = resolve(__dirname, '../../api/.local/mail');
-const mailPrefixes = emails.map((email) => createHash('sha256').update(email).digest('hex') + '-');
+const supplierEmail = 'sales@nile.test';
+const mailPrefixes = [...emails, supplierEmail].map(
+  (email) => createHash('sha256').update(email).digest('hex') + '-',
+);
 let database: Client;
 
 test.beforeAll(async () => {
@@ -370,6 +373,35 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await expect(page.getByText('Awaiting approval', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Approve', exact: true }).click();
   await expect(page.getByText('Approved', { exact: true })).toBeVisible();
+
+  // Approval emails the order to the supplier contact through the file transport.
+  const supplierPrefix = createHash('sha256').update(supplierEmail).digest('hex') + '-';
+  const supplierMailNames = (await readdir(mailDirectory)).filter((name) =>
+    name.startsWith(supplierPrefix),
+  );
+  const supplierMails = await Promise.all(
+    supplierMailNames.map(
+      async (name) =>
+        JSON.parse(await readFile(resolve(mailDirectory, name), 'utf8')) as {
+          to: string;
+          subject: string;
+          text: string;
+          actionUrl?: string;
+        },
+    ),
+  );
+  const orderMail = supplierMails.find(
+    (mail) => mail.subject === `Purchase order PO-0001 from ${renamed}`,
+  );
+  expect(orderMail).toBeTruthy();
+  expect(orderMail!.to).toBe(supplierEmail);
+  expect(orderMail!.actionUrl).toBeUndefined();
+  expect(orderMail!.text).toContain(
+    '- USB-C Charger 65W (USB-C_65W.01): 10 piece @ 25.50 = 255.00',
+  );
+  expect(orderMail!.text).toContain('Total: 255.00 ETB');
+  expect(orderMail!.text).toContain('Deliver to: Main Warehouse, Industrial Zone 4');
+  expect(orderMail!.text).toContain('Note: Urgent restock');
 
   await page.getByLabel(/USB-C_65W\.01/).fill('6');
   await page.getByRole('button', { name: 'Record delivery', exact: true }).click();
