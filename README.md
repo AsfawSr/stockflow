@@ -245,6 +245,13 @@ an archived supplier still appear, with the sourcing fields null. Any member
 reads suggestions. Tests cover the threshold, the quantity rule, sourcing
 provenance, archived products and suppliers, and tenant isolation.
 
+On the suggestions screen, purchasers can turn a sourced suggestion into a draft
+order in one step: a per-row dialog pre-fills the suggested quantity and last
+confirmed price, asks only for the destination location, and lands on the new
+draft's detail screen. The draft is created through the same purchase-order
+endpoints and role checks as manual ordering, and stays fully editable before
+submission. Suggestions without a usable supplier offer no shortcut.
+
 ## Stock API
 
 Stock routes live under `/organizations/:organizationId/stock`. Any member reads
@@ -727,8 +734,10 @@ lists products at or below their reorder point with an order-up-to-twice-the-
 reorder-point quantity and the last confirmed supplier and price for each.
 Milestone 13 makes rejection recoverable: purchasers reopen rejected orders as
 editable drafts with the decision cleared, then resubmit them for a fresh
-verdict. Possible next steps: creating a draft order directly from a reorder
-suggestion, or supplier-facing order emails.
+verdict. Milestone 14 completes the restocking shortcut: a one-click dialog on
+the suggestions screen creates a pre-filled draft order for the suggested
+quantity at the last confirmed price. Possible next steps: supplier-facing
+order emails, or an audit log of workspace activity.
 
 ## Commit Workflow
 
