@@ -1218,4 +1218,121 @@ describe('Purchase order workflow against PostgreSQL', () => {
       await getValuation(outsider.auth).expect(404);
     });
   }, 60000);
+
+  it('measures supplier fill rate and lead time over confirmed orders', async () => {
+    await withApplication(async (app, database) => {
+      const owner = await registerVerified(app);
+      const seed = await seedOrganization(app, owner.auth);
+      const base = `/api/organizations/${seed.organizationId}/purchase-orders`;
+      const performanceUrl = `/api/organizations/${seed.organizationId}/suppliers/${seed.supplierId}/performance`;
+      const getPerformance = (auth = owner.auth) =>
+        request(app.getHttpServer()).get(performanceUrl).set('Authorization', auth);
+      const createSubmitted = async (quantity: number) => {
+        const draft = await request(app.getHttpServer())
+          .post(base)
+          .set('Authorization', owner.auth)
+          .send({ supplierId: seed.supplierId, locationId: seed.locationId })
+          .expect(201);
+        const orderId = draft.body.id as string;
+        const line = await request(app.getHttpServer())
+          .post(`${base}/${orderId}/lines`)
+          .set('Authorization', owner.auth)
+          .send({ productId: seed.chargerId, quantity, unitPrice: '3.00' })
+          .expect(201);
+        await request(app.getHttpServer())
+          .post(`${base}/${orderId}/submit`)
+          .set('Authorization', owner.auth)
+          .expect(200);
+        return { orderId, lineId: line.body.lines[0].id as string };
+      };
+
+      // A supplier without confirmed history reports zeros and unknown rates.
+      const fresh = await getPerformance().expect(200);
+      expect(fresh.body).toEqual({
+        confirmedOrders: 0,
+        openOrders: 0,
+        orderedUnits: 0,
+        receivedUnits: 0,
+        fillRatePercent: null,
+        averageLeadDays: null,
+      });
+
+      // Draft and rejected orders never count.
+      await createSubmitted(7);
+      const rejected = await createSubmitted(3);
+      await request(app.getHttpServer())
+        .post(`${base}/${rejected.orderId}/reject`)
+        .set('Authorization', owner.auth)
+        .send({ note: 'Too expensive' })
+        .expect(200);
+      expect((await getPerformance().expect(200)).body.confirmedOrders).toBe(0);
+
+      // A partially received order is open with a partial fill rate.
+      const first = await createSubmitted(10);
+      await request(app.getHttpServer())
+        .post(`${base}/${first.orderId}/approve`)
+        .set('Authorization', owner.auth)
+        .send({})
+        .expect(200);
+      await request(app.getHttpServer())
+        .post(`${base}/${first.orderId}/receipts`)
+        .set('Authorization', owner.auth)
+        .send({ lines: [{ purchaseOrderLineId: first.lineId, quantity: 6 }] })
+        .expect(201);
+      const partial = await getPerformance().expect(200);
+      expect(partial.body).toEqual({
+        confirmedOrders: 1,
+        openOrders: 1,
+        orderedUnits: 10,
+        receivedUnits: 6,
+        fillRatePercent: '60.0',
+        averageLeadDays: null,
+      });
+
+      // Completion closes the order; a backdated approval yields a measurable lead time.
+      await request(app.getHttpServer())
+        .post(`${base}/${first.orderId}/receipts`)
+        .set('Authorization', owner.auth)
+        .send({ lines: [{ purchaseOrderLineId: first.lineId, quantity: 4 }] })
+        .expect(201);
+      await database.$executeRaw`
+        UPDATE purchase_orders SET decided_at = decided_at - interval '2 days'
+        WHERE id = ${first.orderId}::uuid
+      `;
+      const completed = await getPerformance().expect(200);
+      expect(completed.body).toEqual({
+        confirmedOrders: 1,
+        openOrders: 0,
+        orderedUnits: 10,
+        receivedUnits: 10,
+        fillRatePercent: '100.0',
+        averageLeadDays: '2.0',
+      });
+
+      // An approved but undelivered order dilutes the fill rate and stays open.
+      const second = await createSubmitted(10);
+      await request(app.getHttpServer())
+        .post(`${base}/${second.orderId}/approve`)
+        .set('Authorization', owner.auth)
+        .send({})
+        .expect(200);
+      const mixed = await getPerformance().expect(200);
+      expect(mixed.body).toEqual({
+        confirmedOrders: 2,
+        openOrders: 1,
+        orderedUnits: 20,
+        receivedUnits: 10,
+        fillRatePercent: '50.0',
+        averageLeadDays: '2.0',
+      });
+
+      await request(app.getHttpServer()).get(performanceUrl).expect(401);
+      const outsider = await registerVerified(app);
+      await getPerformance(outsider.auth).expect(404);
+      await request(app.getHttpServer())
+        .get(`/api/organizations/${seed.organizationId}/suppliers/${randomUUID()}/performance`)
+        .set('Authorization', owner.auth)
+        .expect(404);
+    });
+  }, 60000);
 });

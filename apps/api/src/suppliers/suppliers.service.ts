@@ -100,6 +100,54 @@ export class SuppliersService {
     };
   }
 
+  // Delivery reliability over confirmed orders; lead time measures approval to last receipt.
+  async performance(organizationId: string, supplierId: string) {
+    await this.get(organizationId, supplierId);
+    const [row] = (await this.prisma.$queryRaw`
+      WITH confirmed AS (
+        SELECT o.id, o.status, o.decided_at,
+          (SELECT MAX(g.created_at) FROM goods_receipts g WHERE g.purchase_order_id = o.id)
+            AS last_receipt_at,
+          (SELECT COALESCE(SUM(l.quantity), 0) FROM purchase_order_lines l
+            WHERE l.purchase_order_id = o.id) AS ordered,
+          (SELECT COALESCE(SUM(l.received_quantity), 0) FROM purchase_order_lines l
+            WHERE l.purchase_order_id = o.id) AS received
+        FROM purchase_orders o
+        WHERE o.organization_id = ${organizationId}::uuid
+          AND o.supplier_id = ${supplierId}::uuid
+          AND o.status::text IN ('APPROVED', 'PARTIALLY_RECEIVED', 'RECEIVED')
+      )
+      SELECT COUNT(*)::int AS confirmed_orders,
+        (COUNT(*) FILTER (WHERE status::text IN ('APPROVED', 'PARTIALLY_RECEIVED')))::int
+          AS open_orders,
+        COALESCE(SUM(ordered), 0)::int AS ordered_units,
+        COALESCE(SUM(received), 0)::int AS received_units,
+        AVG(EXTRACT(EPOCH FROM (last_receipt_at - decided_at)) / 86400)
+          FILTER (WHERE status::text = 'RECEIVED') AS average_lead_days
+      FROM confirmed
+    `) as {
+      confirmed_orders: number;
+      open_orders: number;
+      ordered_units: number;
+      received_units: number;
+      average_lead_days: string | null;
+    }[];
+    return {
+      confirmedOrders: row.confirmed_orders,
+      openOrders: row.open_orders,
+      orderedUnits: row.ordered_units,
+      receivedUnits: row.received_units,
+      fillRatePercent:
+        row.ordered_units > 0
+          ? new Prisma.Decimal(row.received_units).div(row.ordered_units).mul(100).toFixed(1)
+          : null,
+      averageLeadDays:
+        row.average_lead_days !== null
+          ? new Prisma.Decimal(row.average_lead_days).toFixed(1)
+          : null,
+    };
+  }
+
   async create(organizationId: string, input: CreateSupplierDto) {
     try {
       return await this.prisma.supplier.create({

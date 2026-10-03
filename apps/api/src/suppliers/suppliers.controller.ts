@@ -47,6 +47,15 @@ export class SuppliersController {
     return this.suppliers.prices(organizationId, supplierId);
   }
 
+  @Get(':supplierId/performance')
+  @Header('Cache-Control', 'no-store')
+  performance(
+    @Param('organizationId') organizationId: string,
+    @Param('supplierId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) supplierId: string,
+  ) {
+    return this.suppliers.performance(organizationId, supplierId);
+  }
+
   @Post()
   @Roles('ADMIN', 'PURCHASER')
   @Header('Cache-Control', 'no-store')
