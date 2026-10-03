@@ -4,8 +4,37 @@ import {
   locationInputSchema,
   locationListSchema,
   supplierInputSchema,
+  supplierPerformanceSchema,
   supplierSchema,
 } from '../src/lib/contracts';
+
+test('validates supplier performance metrics with nullable rates', () => {
+  const metrics = {
+    confirmedOrders: 2,
+    openOrders: 1,
+    orderedUnits: 20,
+    receivedUnits: 10,
+    fillRatePercent: '50.0',
+    averageLeadDays: '2.0',
+  };
+  assert.equal(supplierPerformanceSchema.safeParse(metrics).success, true);
+  assert.equal(
+    supplierPerformanceSchema.safeParse({
+      ...metrics,
+      fillRatePercent: null,
+      averageLeadDays: null,
+    }).success,
+    true,
+  );
+  assert.equal(
+    supplierPerformanceSchema.safeParse({ ...metrics, fillRatePercent: '50' }).success,
+    false,
+  );
+  assert.equal(
+    supplierPerformanceSchema.safeParse({ ...metrics, confirmedOrders: -1 }).success,
+    false,
+  );
+});
 
 const supplier = {
   id: '8ed13b94-fd8b-4079-848e-f22edaa8ce05',

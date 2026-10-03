@@ -483,6 +483,9 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await expect(
     page.getByRole('heading', { name: 'Latest confirmed prices', exact: true }),
   ).toBeVisible();
+  await expect(page.getByText('1 (0 open)', { exact: true })).toBeVisible();
+  await expect(page.getByText('100.0% (10 of 10 units)', { exact: true })).toBeVisible();
+  await expect(page.getByText('0.0 days', { exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: '25.50 ETB', exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'PO-0001', exact: true })).toBeVisible();
 

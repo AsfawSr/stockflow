@@ -355,6 +355,15 @@ export type SupplierPrice = {
   reference: string;
   decidedAt: string;
 };
+const percentSchema = z.string().regex(/^\d+(\.\d)$/);
+export const supplierPerformanceSchema = z.object({
+  confirmedOrders: z.number().int().nonnegative(),
+  openOrders: z.number().int().nonnegative(),
+  orderedUnits: z.number().int().nonnegative(),
+  receivedUnits: z.number().int().nonnegative(),
+  fillRatePercent: percentSchema.nullable(),
+  averageLeadDays: percentSchema.nullable(),
+});
 export const reorderSuggestionListSchema = z.object({
   items: z.array(
     z.object({

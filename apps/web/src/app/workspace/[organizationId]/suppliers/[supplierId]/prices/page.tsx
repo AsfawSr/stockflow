@@ -2,7 +2,12 @@ import { ArrowLeft, ReceiptText } from 'lucide-react';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
-import { organizationIdSchema, supplierPriceListSchema, supplierSchema } from '@/lib/contracts';
+import {
+  organizationIdSchema,
+  supplierPerformanceSchema,
+  supplierPriceListSchema,
+  supplierSchema,
+} from '@/lib/contracts';
 import { authenticatedRequest, requireOrganization, requireUser } from '@/lib/session';
 
 export const metadata = { title: 'Supplier prices' };
@@ -17,7 +22,7 @@ export default async function SupplierPricesPage({
   const organization = await requireOrganization(organizationId);
   if (!organizationIdSchema.safeParse(supplierId).success) notFound();
 
-  const [supplier, prices] = await Promise.all([
+  const [supplier, prices, performance] = await Promise.all([
     authenticatedRequest(
       `/organizations/${organization.id}/suppliers/${supplierId}`,
       supplierSchema,
@@ -26,12 +31,18 @@ export default async function SupplierPricesPage({
       `/organizations/${organization.id}/suppliers/${supplierId}/prices`,
       supplierPriceListSchema,
     ),
+    authenticatedRequest(
+      `/organizations/${organization.id}/suppliers/${supplierId}/performance`,
+      supplierPerformanceSchema,
+    ),
   ]);
-  if (!supplier.ok || !prices.ok) {
-    if (supplier.status === 404 || prices.status === 404) notFound();
-    if (supplier.status === 401 || prices.status === 401) redirect('/login?notice=expired');
+  if (!supplier.ok || !prices.ok || !performance.ok) {
+    if (supplier.status === 404 || prices.status === 404 || performance.status === 404) notFound();
+    if (supplier.status === 401 || prices.status === 401 || performance.status === 401)
+      redirect('/login?notice=expired');
     throw new Error('The StockFlow API is unavailable.');
   }
+  const metrics = performance.data;
   const formatDate = (date: string) =>
     new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(
       new Date(date),
@@ -49,6 +60,34 @@ export default async function SupplierPricesPage({
           <h1>{supplier.data.name}</h1>
         </div>
       </div>
+      <section className="workspace-section" aria-labelledby="performance-heading">
+        <div className="section-heading">
+          <h2 id="performance-heading">Delivery performance</h2>
+          <span>confirmed orders only</span>
+        </div>
+        <dl className="organization-details order-details">
+          <div>
+            <dt>Confirmed orders</dt>
+            <dd>
+              {metrics.confirmedOrders} ({metrics.openOrders} open)
+            </dd>
+          </div>
+          <div>
+            <dt>Fill rate</dt>
+            <dd>
+              {metrics.fillRatePercent !== null
+                ? `${metrics.fillRatePercent}% (${metrics.receivedUnits} of ${metrics.orderedUnits} units)`
+                : '\u2014'}
+            </dd>
+          </div>
+          <div>
+            <dt>Average lead time</dt>
+            <dd>
+              {metrics.averageLeadDays !== null ? `${metrics.averageLeadDays} days` : '\u2014'}
+            </dd>
+          </div>
+        </dl>
+      </section>
       <section className="workspace-section" aria-labelledby="prices-heading">
         <div className="section-heading">
           <h2 id="prices-heading">Latest confirmed prices</h2>
