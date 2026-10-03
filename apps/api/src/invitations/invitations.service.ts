@@ -147,7 +147,14 @@ export class InvitationsService {
           select: {
             roles: true,
             organization: {
-              select: { id: true, name: true, currency: true, createdAt: true, updatedAt: true },
+              select: {
+                id: true,
+                name: true,
+                currency: true,
+                replyToEmail: true,
+                createdAt: true,
+                updatedAt: true,
+              },
             },
           },
         });
