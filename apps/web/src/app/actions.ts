@@ -19,6 +19,7 @@ import {
   membershipSchema,
   organizationIdSchema,
   organizationInputSchema,
+  replyToEmailInputSchema,
   organizationSchema,
   productInputSchema,
   productSchema,
@@ -203,7 +204,10 @@ export async function renameOrganizationAction(
   form: FormData,
 ): Promise<FormState> {
   const id = organizationIdSchema.safeParse(form.get('organizationId'));
-  const parsed = organizationInputSchema.pick({ name: true }).safeParse({ name: form.get('name') });
+  const parsed = organizationInputSchema
+    .pick({ name: true })
+    .extend({ replyToEmail: replyToEmailInputSchema })
+    .safeParse({ name: form.get('name'), replyToEmail: form.get('replyToEmail') ?? '' });
   if (!id.success) return { error: 'Choose a valid organization.' };
   if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors };
   const result = await actionRequest(`/organizations/${id.data}`, organizationSchema, {

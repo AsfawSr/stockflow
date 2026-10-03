@@ -9,9 +9,16 @@ import {
   memberListSchema,
   memberRolesInputSchema,
   memberSchema,
+  replyToEmailInputSchema,
 } from '../src/lib/contracts';
 
 const uuid = '8ed13b94-fd8b-4079-848e-f22edaa8ce05';
+
+test('normalizes the order reply-to email and stores blanks as null', () => {
+  assert.equal(replyToEmailInputSchema.parse(' Purchasing@Orders.test '), 'purchasing@orders.test');
+  assert.equal(replyToEmailInputSchema.parse('   '), null);
+  assert.equal(replyToEmailInputSchema.safeParse('not-an-email').success, false);
+});
 
 test('validates paginated audit logs with nullable actors', () => {
   const event = {

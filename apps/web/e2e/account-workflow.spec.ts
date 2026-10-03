@@ -256,7 +256,8 @@ test('account access, cookie privacy, organization selection, and revoked permis
   const firstId = await createOrganization(page, firstName, 'ETB');
   await expect(page.locator('.organization-details')).toContainText('ETB');
   await page.getByLabel('Organization name', { exact: true }).fill(renamed);
-  await page.getByRole('button', { name: 'Save name', exact: true }).click();
+  await page.getByLabel('Order reply-to email (optional)', { exact: true }).fill(emails[0]);
+  await page.getByRole('button', { name: 'Save profile', exact: true }).click();
   await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
   await expect(page.getByRole('status')).toContainText('Organization updated.');
 
@@ -390,6 +391,7 @@ test('account access, cookie privacy, organization selection, and revoked permis
           subject: string;
           text: string;
           actionUrl?: string;
+          replyTo?: string;
         },
     ),
   );
@@ -399,6 +401,7 @@ test('account access, cookie privacy, organization selection, and revoked permis
   expect(orderMail).toBeTruthy();
   expect(orderMail!.to).toBe(supplierEmail);
   expect(orderMail!.actionUrl).toBeUndefined();
+  expect(orderMail!.replyTo).toBe(emails[0]);
   expect(orderMail!.text).toContain(
     '- USB-C Charger 65W (USB-C_65W.01): 10 piece @ 25.50 = 255.00',
   );
@@ -807,7 +810,7 @@ test('account access, cookie privacy, organization selection, and revoked permis
     [firstId, userId],
   );
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Save name', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save profile', exact: true })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Members', exact: true })).toHaveCount(0);
   await page.getByRole('link', { name: 'Products', exact: true }).click();
   await expect(page.getByText('USB-C_65W.01', { exact: true })).toBeVisible();

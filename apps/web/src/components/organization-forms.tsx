@@ -181,9 +181,23 @@ export function RenameOrganizationForm({ organization }: { organization: Organiz
         />
         <FieldError name="name" state={state} />
       </div>
+      <div className="form-field">
+        <label htmlFor="reply-to-email">Order reply-to email (optional)</label>
+        <input
+          key={`reply-${organization.updatedAt}`}
+          id="reply-to-email"
+          name="replyToEmail"
+          type="email"
+          maxLength={254}
+          defaultValue={organization.replyToEmail ?? ''}
+          aria-invalid={Boolean(state.fieldErrors?.replyToEmail)}
+        />
+        <p className="field-hint">Supplier replies to order emails go to this address.</p>
+        <FieldError name="replyToEmail" state={state} />
+      </div>
       <SubmitButton pendingText="Saving...">
         <Save size={16} aria-hidden="true" />
-        Save name
+        Save profile
       </SubmitButton>
     </form>
   );

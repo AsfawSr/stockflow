@@ -19,6 +19,7 @@ export const organizationSchema = z.object({
   id: z.uuid(),
   name: z.string().min(1),
   currency: z.string().regex(/^[A-Z]{3}$/),
+  replyToEmail: z.string().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
@@ -136,6 +137,16 @@ export const organizationInputSchema = z.object({
   name: z.string().trim().min(1, 'Enter an organization name.').max(160),
   currency: z.string().regex(/^[A-Z]{3}$/, 'Choose a currency.'),
 });
+export const replyToEmailInputSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(254, 'Use at most 254 characters.')
+  .transform((value) => value || null)
+  .refine(
+    (value) => value === null || z.email().safeParse(value).success,
+    'Enter a valid email address.',
+  );
 
 export const productSchema = z.object({
   id: z.uuid(),
