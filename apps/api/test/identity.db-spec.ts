@@ -150,7 +150,32 @@ describe('Identity database constraints', () => {
       client.query('UPDATE organizations SET name = $1 WHERE id = $2', [' \t ', organizationId]),
     ).rejects.toMatchObject({ code: '23514', constraint: 'organizations_name_nonblank' });
   });
-
+  it('requires a normalized organization reply-to email when present', async () => {
+    await expect(
+      client.query('UPDATE organizations SET reply_to_email = $1 WHERE id = $2', [
+        'orders@example.test',
+        organizationId,
+      ]),
+    ).resolves.toMatchObject({ rowCount: 1 });
+    await expect(
+      client.query('UPDATE organizations SET reply_to_email = NULL WHERE id = $1', [
+        organizationId,
+      ]),
+    ).resolves.toMatchObject({ rowCount: 1 });
+    for (const invalid of ['Orders@Example.test', 'orders @example.test', 'not-an-email', '']) {
+      await client.query('SAVEPOINT reply_to_violation');
+      await expect(
+        client.query('UPDATE organizations SET reply_to_email = $1 WHERE id = $2', [
+          invalid,
+          organizationId,
+        ]),
+      ).rejects.toMatchObject({
+        code: '23514',
+        constraint: 'organizations_reply_to_email_normalized',
+      });
+      await client.query('ROLLBACK TO SAVEPOINT reply_to_violation');
+    }
+  });
   it('rejects a blank display name', async () => {
     await expect(
       client.query('UPDATE users SET display_name = $1 WHERE id = $2', [' \t ', userId]),
