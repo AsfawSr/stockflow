@@ -207,6 +207,7 @@ and the decision records who decided and when.
 | Method | Path | Behavior |
 | --- | --- | --- |
 | GET | `/` | Lists orders with status filter and pagination, newest first, including totals. |
+| GET | `/suggestions` | Active products at or below their reorder point, with on-hand totals, a restock quantity, and the last confirmed supplier and price. |
 | POST | `/` | Creates a draft against an active supplier and location; numbering is serialized per organization. |
 | GET | `/:orderId` | Full detail: lines, receipts, decision, computed totals. |
 | PATCH | `/:orderId` | Draft-only header changes (supplier, location, note). |
@@ -226,6 +227,16 @@ products, and cross-tenant references are rejected. Prices are returned as fixed
 two-decimal strings computed with decimal arithmetic, never floats. The tests
 cover the full lifecycle, the state machine, role separation, isolation, and
 committed-data concurrency for receipts and numbering.
+
+`GET .../purchase-orders/suggestions` turns reorder points into a shopping list:
+every active product whose summed on-hand balance is at or below its reorder
+point appears with a suggested quantity that restocks to twice the reorder point
+(an order-up-to rule, never below one unit). Each suggestion carries the supplier,
+unit price, and order reference from the latest confirmed order for that product,
+reusing the supplier price history rules; products with no confirmed history or
+an archived supplier still appear, with the sourcing fields null. Any member
+reads suggestions. Tests cover the threshold, the quantity rule, sourcing
+provenance, archived products and suppliers, and tenant isolation.
 
 ## Stock API
 
@@ -704,8 +715,11 @@ filters, and CSV exports for levels and movements proxied through the web
 session. Milestone 11 adds supplier price memory: the latest confirmed price
 per product is derived from approved order history, shown on a per-supplier
 price screen, and pre-filled with a provenance hint when adding draft order
-lines. Possible next steps: reorder suggestions from the low-stock data, or
-revise-and-resubmit for rejected orders.
+lines. Milestone 12 closes the restocking loop: a reorder suggestions screen
+lists products at or below their reorder point with an order-up-to-twice-the-
+reorder-point quantity and the last confirmed supplier and price for each.
+Possible next steps: revise-and-resubmit for rejected orders, or creating a
+draft order directly from a reorder suggestion.
 
 ## Commit Workflow
 
