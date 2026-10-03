@@ -169,6 +169,15 @@ rejected, and cancelled negotiations never surface. Each entry carries the
 source order reference and approval date. The tests cover recency, exclusion of
 unconfirmed states, per-supplier isolation, and tenant isolation.
 
+`GET .../suppliers/:supplierId/performance` grades the same history: confirmed
+and open order counts, ordered versus received units with a one-decimal fill
+rate, and the average lead time in days from approval to the last receipt of
+each completed order. Rates are null rather than zero when there is nothing to
+measure — a new supplier has an unknown fill rate, not a bad one. The supplier
+screen shows these metrics above the price list. Tests cover the empty state,
+partial deliveries, completed orders with a backdated approval for a measurable
+lead time, dilution by undelivered orders, and the usual access rules.
+
 ## Purchase Order and Stock Ledger Model
 
 The sixth migration adds the procurement workflow and the beginning of the stock
@@ -785,8 +794,11 @@ changes are recorded in a tenant-scoped audit log that administrators browse
 from the workspace overview. Milestone 17 prices the warehouse: an inventory
 valuation report derives weighted average costs from receipt history and shows
 per-product and total on-hand value, excluding stock whose cost is unknown.
-Possible next steps: org-level settings for the order email sender identity,
-or supplier performance metrics from receipt timing.
+Milestone 18 grades the partners: each supplier screen now shows confirmed and
+open order counts, the unit fill rate, and the average approval-to-delivery
+lead time, all derived from existing order history. Possible next steps:
+org-level settings for the order email sender identity, or a printable
+purchase order document.
 
 ## Commit Workflow
 
