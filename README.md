@@ -235,6 +235,14 @@ rejection reason belongs to exactly one submission cycle and the next reviewer
 starts clean. The reopened draft is fully editable and goes through submission
 and approval again. Approved, cancelled, and in-flight orders cannot be revised.
 
+Approval also notifies the supplier: when the supplier record has an email
+address, the decision sends a plain-text purchase order (lines, totals in the
+organization currency, destination with address, and any order note) through
+the same mail transport and delivery metrics as account email. Suppliers
+without an address are skipped silently, rejection never notifies anyone, and
+a failed send is logged but never rolls back the approval. Order emails carry
+no action link, so account-mail tooling ignores them.
+
 `GET .../purchase-orders/suggestions` turns reorder points into a shopping list:
 every active product whose summed on-hand balance is at or below its reorder
 point appears with a suggested quantity that restocks to twice the reorder point
@@ -736,8 +744,11 @@ Milestone 13 makes rejection recoverable: purchasers reopen rejected orders as
 editable drafts with the decision cleared, then resubmit them for a fresh
 verdict. Milestone 14 completes the restocking shortcut: a one-click dialog on
 the suggestions screen creates a pre-filled draft order for the suggested
-quantity at the last confirmed price. Possible next steps: supplier-facing
-order emails, or an audit log of workspace activity.
+quantity at the last confirmed price. Milestone 15 reaches outside the team:
+approving an order emails it to the supplier contact through the monitored
+mail transport, without ever blocking the approval itself. Possible next
+steps: an audit log of workspace activity, or org-level settings for the
+order email sender identity.
 
 ## Commit Workflow
 
