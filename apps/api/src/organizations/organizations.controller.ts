@@ -19,8 +19,8 @@ import { PageQueryDto } from '../common/list-query.dto';
 import { OrganizationAccessGuard, Roles } from './organization-access.guard';
 import {
   CreateOrganizationDto,
-  RenameOrganizationDto,
   UpdateMemberRolesDto,
+  UpdateOrganizationDto,
 } from './organizations.dto';
 import { OrganizationsService } from './organizations.service';
 
@@ -59,12 +59,12 @@ export class OrganizationsController {
   @UseGuards(OrganizationAccessGuard)
   @Roles('ADMIN')
   @Header('Cache-Control', 'no-store')
-  rename(
+  update(
     @Req() request: AuthenticatedRequest,
     @Param('organizationId') organizationId: string,
-    @Body() input: RenameOrganizationDto,
+    @Body() input: UpdateOrganizationDto,
   ) {
-    return this.organizations.rename(request.principal.user.id, organizationId, input);
+    return this.organizations.update(request.principal.user.id, organizationId, input);
   }
 
   @Get(':organizationId/members')

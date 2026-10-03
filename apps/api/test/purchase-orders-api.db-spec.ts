@@ -1013,7 +1013,7 @@ describe('Purchase order workflow against PostgreSQL', () => {
   }, 60000);
 
   it('emails approved orders to supplier contacts without blocking approval', async () => {
-    await withApplication(async (app) => {
+    await withApplication(async (app, database) => {
       const owner = await registerVerified(app);
       const seed = await seedOrganization(app, owner.auth);
       const base = `/api/organizations/${seed.organizationId}/purchase-orders`;
@@ -1061,6 +1061,7 @@ describe('Purchase order workflow against PostgreSQL', () => {
       if (!message) throw new Error('Supplier order email was not captured.');
       expect(message.subject).toContain('Purchase order PO-0002 from Orders ');
       expect(message.actionUrl).toBeUndefined();
+      expect(message.replyTo).toBeUndefined();
       expect(message.text).toContain('Hello Order Supplier,');
       expect(message.text).toContain('- USB-C Charger (CHARGER-65): 3 piece @ 19.99 = 59.97');
       expect(message.text).toContain('Total: 59.97 USD');
@@ -1096,6 +1097,48 @@ describe('Purchase order workflow against PostgreSQL', () => {
         .send({ note: 'Not needed' })
         .expect(200);
       expect(outbox.length).toBe(rejectBefore);
+
+      // A configured reply-to address rides along on supplier mail.
+      await request(app.getHttpServer())
+        .patch(`/api/organizations/${seed.organizationId}`)
+        .set('Authorization', owner.auth)
+        .send({ replyToEmail: ' Purchasing@Orders.test ' })
+        .expect(200);
+      const detail = await request(app.getHttpServer())
+        .get(`/api/organizations/${seed.organizationId}`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      expect(detail.body.replyToEmail).toBe('purchasing@orders.test');
+      await approveOrder();
+      const replied = outbox.findLast((mail) => mail.to === 'orders@supplier.test');
+      expect(replied?.replyTo).toBe('purchasing@orders.test');
+
+      // Clearing the address removes the header again.
+      await request(app.getHttpServer())
+        .patch(`/api/organizations/${seed.organizationId}`)
+        .set('Authorization', owner.auth)
+        .send({ replyToEmail: null })
+        .expect(200);
+      await approveOrder();
+      const cleared = outbox.findLast((mail) => mail.to === 'orders@supplier.test');
+      expect(cleared?.replyTo).toBeUndefined();
+
+      await request(app.getHttpServer())
+        .patch(`/api/organizations/${seed.organizationId}`)
+        .set('Authorization', owner.auth)
+        .send({ replyToEmail: 'not-an-email' })
+        .expect(400);
+      await request(app.getHttpServer())
+        .patch(`/api/organizations/${seed.organizationId}`)
+        .set('Authorization', owner.auth)
+        .send({})
+        .expect(400);
+      const warehouse = await addMember(database, app, seed.organizationId, ['WAREHOUSE']);
+      await request(app.getHttpServer())
+        .patch(`/api/organizations/${seed.organizationId}`)
+        .set('Authorization', warehouse.auth)
+        .send({ replyToEmail: 'intruder@orders.test' })
+        .expect(403);
     });
   }, 60000);
 

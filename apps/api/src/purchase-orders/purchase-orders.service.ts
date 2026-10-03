@@ -449,7 +449,7 @@ export class PurchaseOrdersService {
       }),
       this.prisma.organization.findUnique({
         where: { id: organizationId },
-        select: { name: true, currency: true },
+        select: { name: true, currency: true, replyToEmail: true },
       }),
       this.prisma.location.findUnique({
         where: { organizationId_id: { organizationId, id: order.location.id } },
@@ -477,6 +477,7 @@ export class PurchaseOrdersService {
         to: supplier.email,
         subject: `Purchase order ${order.reference} from ${organization.name}`,
         text,
+        ...(organization.replyToEmail ? { replyTo: organization.replyToEmail } : {}),
       });
     } catch {
       this.logger.warn(`Supplier email for ${order.reference} failed; the order stays approved.`);

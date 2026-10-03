@@ -1,18 +1,24 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { PageQueryDto } from '../common/list-query.dto';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateOrganizationDto,
-  RenameOrganizationDto,
   UpdateMemberRolesDto,
+  UpdateOrganizationDto,
 } from './organizations.dto';
 
 const organizationSelect = {
   id: true,
   name: true,
   currency: true,
+  replyToEmail: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -91,11 +97,16 @@ export class OrganizationsService {
     };
   }
 
-  async rename(userId: string, organizationId: string, input: RenameOrganizationDto) {
+  async update(userId: string, organizationId: string, input: UpdateOrganizationDto) {
+    if (input.name === undefined && input.replyToEmail === undefined)
+      throw new BadRequestException('Provide a name or reply-to email to update.');
     try {
       return await this.prisma.organization.update({
         where: { id: organizationId, memberships: { some: { userId, roles: { has: 'ADMIN' } } } },
-        data: { name: input.name },
+        data: {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.replyToEmail !== undefined ? { replyToEmail: input.replyToEmail } : {}),
+        },
         select: organizationSelect,
       });
     } catch (error) {

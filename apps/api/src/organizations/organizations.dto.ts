@@ -3,8 +3,10 @@ import {
   ArrayNotEmpty,
   ArrayUnique,
   IsArray,
+  IsEmail,
   IsIn,
   IsISO4217CurrencyCode,
+  IsOptional,
   IsString,
   Matches,
   MaxLength,
@@ -27,6 +29,24 @@ export class RenameOrganizationDto {
   @Matches(/\S/)
   @MaxLength(160)
   name!: string;
+}
+
+export class UpdateOrganizationDto {
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @Matches(/\S/)
+  @MaxLength(160)
+  name?: string;
+
+  // Null clears the address; IsOptional skips validation for both null and undefined.
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  )
+  @IsEmail()
+  @MaxLength(254)
+  replyToEmail?: string | null;
 }
 
 export class CreateOrganizationDto extends RenameOrganizationDto {
