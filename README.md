@@ -256,7 +256,11 @@ organization currency, destination with address, and any order note) through
 the same mail transport and delivery metrics as account email. Suppliers
 without an address are skipped silently, rejection never notifies anyone, and
 a failed send is logged but never rolls back the approval. Order emails carry
-no action link, so account-mail tooling ignores them.
+no action link, so account-mail tooling ignores them. Administrators can set
+an organization-wide reply-to address (stored lowercase with a database check)
+in the workspace profile; when present it rides along on supplier mail so
+replies reach the purchasing team instead of the no-reply sender, and clearing
+the field removes the header again.
 
 `GET .../purchase-orders/suggestions` turns reorder points into a shopping list:
 every active product whose summed on-hand balance is at or below its reorder
@@ -810,8 +814,11 @@ printable purchase order document — a standalone print view with supplier and
 delivery details rendered for the browser's print-to-PDF, with no server-side
 PDF dependency. Milestone 20 adds time to the dashboard: the overview shows an
 eight-week activity table of new orders, received units, and stock movements,
-bucketed by ISO week in UTC. Possible next steps: org-level settings for the
-order email sender identity, or archiving entire organizations.
+bucketed by ISO week in UTC. Milestone 21 closes the supplier email loop: each
+organization can set a reply-to address in its profile, enforced lowercase by
+a database check and attached to outgoing order mail. Possible next steps:
+archiving entire organizations, or a seeded demo workspace for first-run
+exploration.
 
 ## Commit Workflow
 
