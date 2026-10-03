@@ -606,6 +606,25 @@ test('account access, cookie privacy, organization selection, and revoked permis
     suggestionRow.getByRole('cell', { name: '25.50 ETB (PO-0001)', exact: true }),
   ).toBeVisible();
   await checkLayouts(page);
+
+  // One click turns the suggestion into a pre-filled draft order.
+  await suggestionRow.getByRole('button', { name: 'Order USB-C_65W.01', exact: true }).click();
+  const suggestionDialog = page.getByRole('dialog', {
+    name: 'Order USB-C Charger 65W',
+    exact: true,
+  });
+  await expect(suggestionDialog.getByLabel('Quantity', { exact: true })).toHaveValue('9');
+  await expect(suggestionDialog.getByLabel('Unit price', { exact: true })).toHaveValue('25.50');
+  await suggestionDialog
+    .getByLabel('Deliver to', { exact: true })
+    .selectOption({ label: 'Main Warehouse' });
+  await suggestionDialog.getByRole('button', { name: 'Create draft', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'PO-0004', exact: true })).toBeVisible();
+  await expect(page.getByText('Draft', { exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: '229.50', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel order', exact: true }).click();
+  await expect(page.getByText('Cancelled', { exact: true })).toBeVisible();
+
   await page.getByRole('link', { name: 'All purchase orders', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Purchase orders', exact: true })).toBeVisible();
   // Restore the original reorder point so later low-stock expectations hold.

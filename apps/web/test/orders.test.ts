@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   createOrderInputSchema,
+  orderFromSuggestionInputSchema,
   orderLineInputSchema,
   orderStatusLabels,
   orderStatusTone,
@@ -59,6 +60,30 @@ test('validates reorder suggestion lists with nullable sourcing', () => {
     reorderSuggestionListSchema.safeParse({ items: [{ ...item, suggestedQuantity: 0 }] }).success,
     false,
   );
+});
+
+test('validates ordering from a suggestion with coerced quantities', () => {
+  const input = {
+    supplierId: uuid,
+    locationId: uuid,
+    productId: uuid,
+    quantity: '16',
+    unitPrice: '25.50',
+  };
+  assert.deepEqual(orderFromSuggestionInputSchema.parse(input), { ...input, quantity: 16 });
+  for (const invalid of [
+    { ...input, locationId: '' },
+    { ...input, quantity: '0' },
+    { ...input, quantity: '2.5' },
+    { ...input, unitPrice: '' },
+    { ...input, unitPrice: '5,50' },
+  ]) {
+    assert.equal(
+      orderFromSuggestionInputSchema.safeParse(invalid).success,
+      false,
+      JSON.stringify(invalid),
+    );
+  }
 });
 
 test('validates order creation input', () => {

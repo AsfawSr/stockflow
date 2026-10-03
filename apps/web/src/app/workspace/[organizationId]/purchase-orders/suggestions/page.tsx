@@ -2,7 +2,8 @@ import { ArrowLeft, PackageSearch } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
-import { reorderSuggestionListSchema } from '@/lib/contracts';
+import { SuggestionOrderButton } from '@/components/purchase-order-forms';
+import { locationListSchema, reorderSuggestionListSchema } from '@/lib/contracts';
 import { authenticatedRequest, requireOrganization, requireUser } from '@/lib/session';
 
 export const metadata = { title: 'Reorder suggestions' };
@@ -15,16 +16,30 @@ export default async function ReorderSuggestionsPage({
   const { organizationId } = await params;
   const user = await requireUser();
   const organization = await requireOrganization(organizationId);
+  const purchaser = organization.roles.some((role) => role === 'ADMIN' || role === 'PURCHASER');
 
-  const result = await authenticatedRequest(
-    `/organizations/${organization.id}/purchase-orders/suggestions`,
-    reorderSuggestionListSchema,
-  );
-  if (!result.ok) {
+  const [result, locations] = await Promise.all([
+    authenticatedRequest(
+      `/organizations/${organization.id}/purchase-orders/suggestions`,
+      reorderSuggestionListSchema,
+    ),
+    purchaser
+      ? authenticatedRequest(
+          `/organizations/${organization.id}/locations?status=active&pageSize=100`,
+          locationListSchema,
+        )
+      : null,
+  ]);
+  if (!result.ok || (locations && !locations.ok)) {
     if (result.status === 401) redirect('/login?notice=expired');
     throw new Error('The StockFlow API is unavailable.');
   }
   const items = result.data.items;
+  const locationOptions =
+    locations?.ok === true
+      ? locations.data.items.map((location) => ({ id: location.id, label: location.name }))
+      : [];
+  const canOrder = purchaser && locationOptions.length > 0;
 
   return (
     <AppShell user={user} organization={organization} section="Purchase orders">
@@ -69,6 +84,7 @@ export default async function ReorderSuggestionsPage({
                   <th scope="col">SUGGESTED QTY</th>
                   <th scope="col">LAST SUPPLIER</th>
                   <th scope="col">LAST PRICE</th>
+                  {canOrder && <th scope="col">ORDER</th>}
                 </tr>
               </thead>
               <tbody>
@@ -91,6 +107,27 @@ export default async function ReorderSuggestionsPage({
                         ? `${item.unitPrice} ${organization.currency} (${item.reference})`
                         : '\u2014'}
                     </td>
+                    {canOrder && (
+                      <td>
+                        {item.supplier ? (
+                          <SuggestionOrderButton
+                            organizationId={organization.id}
+                            locations={locationOptions}
+                            suggestion={{
+                              productId: item.product.id,
+                              productName: item.product.name,
+                              sku: item.product.sku,
+                              supplierId: item.supplier.id,
+                              supplierName: item.supplier.name,
+                              quantity: item.suggestedQuantity,
+                              unitPrice: item.unitPrice ?? '',
+                            }}
+                          />
+                        ) : (
+                          '\u2014'
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

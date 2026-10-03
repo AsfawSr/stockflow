@@ -352,6 +352,16 @@ export const reorderSuggestionListSchema = z.object({
     }),
   ),
 });
+export const orderFromSuggestionInputSchema = z.object({
+  supplierId: z.uuid('This suggestion is no longer available.'),
+  locationId: z.uuid('Choose a destination location.'),
+  productId: z.uuid('This suggestion is no longer available.'),
+  quantity: z.coerce.number().int('Enter a whole number.').min(1, 'Enter a quantity.').max(1000000),
+  unitPrice: z
+    .string()
+    .trim()
+    .regex(/^\d{1,10}(\.\d{1,2})?$/, 'Enter a price such as 25 or 25.50.'),
+});
 
 export const stockMovementTypeSchema = z.enum([
   'RECEIPT',

@@ -23,6 +23,7 @@ import {
   productInputSchema,
   productSchema,
   createOrderInputSchema,
+  orderFromSuggestionInputSchema,
   orderLineInputSchema,
   purchaseOrderSchema,
   rejectInputSchema,
@@ -409,6 +410,54 @@ export async function createPurchaseOrderAction(
     };
   revalidatePath(`/workspace/${organizationId.data}/purchase-orders`);
   redirect(`/workspace/${organizationId.data}/purchase-orders/${result.data.id}`);
+}
+
+export async function orderFromSuggestionAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  if (!organizationId.success) return { error: 'Choose a valid organization.' };
+  const values = {
+    supplierId: String(form.get('supplierId') ?? ''),
+    locationId: String(form.get('locationId') ?? ''),
+    productId: String(form.get('productId') ?? ''),
+    quantity: String(form.get('quantity') ?? ''),
+    unitPrice: String(form.get('unitPrice') ?? ''),
+  };
+  const parsed = orderFromSuggestionInputSchema.safeParse(values);
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors, values };
+  const created = await actionRequest(
+    `/organizations/${organizationId.data}/purchase-orders`,
+    purchaseOrderSchema,
+    {
+      method: 'POST',
+      body: { supplierId: parsed.data.supplierId, locationId: parsed.data.locationId, note: null },
+    },
+  );
+  if (!created.ok)
+    return {
+      error:
+        created.status === 409
+          ? 'The supplier or location is archived. Refresh and try again.'
+          : created.error,
+      values,
+    };
+  // The draft exists either way; the detail screen is where any line problem gets fixed.
+  await actionRequest(
+    `/organizations/${organizationId.data}/purchase-orders/${created.data.id}/lines`,
+    purchaseOrderSchema,
+    {
+      method: 'POST',
+      body: {
+        productId: parsed.data.productId,
+        quantity: parsed.data.quantity,
+        unitPrice: parsed.data.unitPrice,
+      },
+    },
+  );
+  revalidatePath(`/workspace/${organizationId.data}/purchase-orders`);
+  redirect(`/workspace/${organizationId.data}/purchase-orders/${created.data.id}`);
 }
 
 function orderPaths(organizationId: string, orderId: string) {

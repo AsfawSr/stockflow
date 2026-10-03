@@ -15,6 +15,7 @@ import {
 import {
   addOrderLineAction,
   createPurchaseOrderAction,
+  orderFromSuggestionAction,
   receiveOrderAction,
   rejectOrderAction,
   removeOrderLineAction,
@@ -117,6 +118,122 @@ export function CreateOrderButton({
                 defaultValue={state.values?.note}
               />
               <FieldError name="note" state={state} />
+            </div>
+            <div className="dialog-actions">
+              <SubmitButton pendingText="Creating...">
+                <ClipboardList size={17} aria-hidden="true" />
+                Create draft
+              </SubmitButton>
+            </div>
+          </form>
+        )}
+      </dialog>
+    </>
+  );
+}
+
+export function SuggestionOrderButton({
+  organizationId,
+  locations,
+  suggestion,
+}: {
+  organizationId: string;
+  locations: Option[];
+  suggestion: {
+    productId: string;
+    productName: string;
+    sku: string;
+    supplierId: string;
+    supplierName: string;
+    quantity: number;
+    unitPrice: string;
+  };
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [state, action, pending] = useActionState(orderFromSuggestionAction, {} as FormState);
+  const field = (name: string) => `suggestion-${suggestion.productId}-${name}`;
+  return (
+    <>
+      <button
+        className="secondary-button"
+        aria-label={`Order ${suggestion.sku}`}
+        onClick={() => dialog.current?.showModal()}
+      >
+        <ClipboardList size={16} aria-hidden="true" />
+        Order
+      </button>
+      <dialog
+        className="organization-dialog"
+        ref={dialog}
+        aria-label={`Order ${suggestion.productName}`}
+        onCancel={(event) => {
+          if (pending) event.preventDefault();
+        }}
+      >
+        <div className="dialog-heading">
+          <h2>Order {suggestion.productName}</h2>
+          <button
+            className="icon-button"
+            aria-label="Close dialog"
+            title="Close dialog"
+            disabled={pending}
+            onClick={() => dialog.current?.close()}
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <p className="muted">Creates a draft order with {suggestion.supplierName}.</p>
+        {locations.length === 0 ? (
+          <p className="form-notice" role="status">
+            Create an active location before ordering.
+          </p>
+        ) : (
+          <form action={action} className="stacked-form">
+            <input type="hidden" name="organizationId" value={organizationId} />
+            <input type="hidden" name="supplierId" value={suggestion.supplierId} />
+            <input type="hidden" name="productId" value={suggestion.productId} />
+            <FormFeedback state={state} />
+            <div className="form-field">
+              <label htmlFor={field('location')}>Deliver to</label>
+              <select
+                id={field('location')}
+                name="locationId"
+                defaultValue={state.values?.locationId ?? ''}
+              >
+                <option value="" disabled>
+                  Choose a location
+                </option>
+                {locations.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.label}
+                  </option>
+                ))}
+              </select>
+              <FieldError name="locationId" state={state} />
+            </div>
+            <div className="form-field">
+              <label htmlFor={field('quantity')}>Quantity</label>
+              <input
+                id={field('quantity')}
+                name="quantity"
+                type="number"
+                min={1}
+                max={1000000}
+                required
+                defaultValue={state.values?.quantity ?? String(suggestion.quantity)}
+              />
+              <FieldError name="quantity" state={state} />
+            </div>
+            <div className="form-field">
+              <label htmlFor={field('price')}>Unit price</label>
+              <input
+                id={field('price')}
+                name="unitPrice"
+                inputMode="decimal"
+                required
+                defaultValue={state.values?.unitPrice ?? suggestion.unitPrice}
+              />
+              <FieldError name="unitPrice" state={state} />
             </div>
             <div className="dialog-actions">
               <SubmitButton pendingText="Creating...">
