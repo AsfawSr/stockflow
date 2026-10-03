@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import { AccountMailer } from '../auth/account-mailer.service';
+import { AuditService } from '../audit/audit.service';
 import { PageQueryDto } from '../common/list-query.dto';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -30,6 +31,7 @@ export class InvitationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailer: AccountMailer,
+    private readonly audit: AuditService,
   ) {}
 
   async list(organizationId: string, query: PageQueryDto) {
@@ -89,21 +91,41 @@ export class InvitationsService {
       this.logger.warn('Invitation email delivery failed.');
       throw new ServiceUnavailableException('The invitation email could not be sent. Try again.');
     }
+    await this.audit.record({
+      organizationId,
+      actorId: userId,
+      action: 'invitation.created',
+      entityType: 'invitation',
+      entityId: invitation.id,
+      summary: `Invited ${input.email} as ${input.roles.join(', ')}`,
+    });
     return invitation;
   }
 
-  async revoke(organizationId: string, invitationId: string) {
+  async revoke(organizationId: string, actorId: string, invitationId: string) {
+    const invitation = await this.prisma.invitation.findFirst({
+      where: { id: invitationId, organizationId },
+      select: { email: true },
+    });
     const removed = await this.prisma.invitation.deleteMany({
       where: { id: invitationId, organizationId },
     });
-    if (removed.count !== 1) throw new NotFoundException('Invitation not found.');
+    if (removed.count !== 1 || !invitation) throw new NotFoundException('Invitation not found.');
+    await this.audit.record({
+      organizationId,
+      actorId,
+      action: 'invitation.revoked',
+      entityType: 'invitation',
+      entityId: invitationId,
+      summary: `Revoked the invitation for ${invitation.email}`,
+    });
   }
 
   async accept(user: { id: string; email: string }, token: string) {
     const invalid = () =>
       new BadRequestException('This invitation is invalid or expired. Ask for a new one.');
     const tokenHash = createHash('sha256').update(token).digest('hex');
-    return this.prisma.$transaction(async (tx) => {
+    const joined = await this.prisma.$transaction(async (tx) => {
       const candidate = await tx.invitation.findUnique({
         where: { tokenHash },
         select: { id: true, organizationId: true, email: true, roles: true, expiresAt: true },
@@ -137,5 +159,13 @@ export class InvitationsService {
         throw error;
       }
     });
+    await this.audit.record({
+      organizationId: joined.id,
+      actorId: user.id,
+      action: 'invitation.accepted',
+      entityType: 'invitation',
+      summary: `${user.email} joined from an invitation`,
+    });
+    return joined;
   }
 }

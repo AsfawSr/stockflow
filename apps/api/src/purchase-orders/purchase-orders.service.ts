@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { AccountMailer } from '../auth/account-mailer.service';
+import { AuditService } from '../audit/audit.service';
 import { Prisma, PurchaseOrderStatus } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -97,6 +98,7 @@ export class PurchaseOrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mailer: AccountMailer,
+    private readonly audit: AuditService,
   ) {}
 
   private async requireActiveSupplier(organizationId: string, supplierId: string) {
@@ -264,7 +266,16 @@ export class PurchaseOrdersService {
       });
       return order.id;
     });
-    return this.get(organizationId, orderId);
+    const order = await this.get(organizationId, orderId);
+    await this.audit.record({
+      organizationId,
+      actorId: userId,
+      action: 'order.created',
+      entityType: 'purchase_order',
+      entityId: orderId,
+      summary: `Created purchase order ${order.reference}`,
+    });
+    return order;
   }
 
   async update(organizationId: string, orderId: string, input: UpdatePurchaseOrderDto) {
@@ -369,7 +380,7 @@ export class PurchaseOrdersService {
     return this.get(organizationId, orderId);
   }
 
-  async submit(organizationId: string, orderId: string) {
+  async submit(organizationId: string, orderId: string, userId: string) {
     const updated = await this.prisma.purchaseOrder.updateMany({
       where: { id: orderId, organizationId, status: 'DRAFT', lines: { some: {} } },
       data: { status: 'SUBMITTED' },
@@ -384,7 +395,16 @@ export class PurchaseOrdersService {
         throw new ConflictException('Add at least one line before submitting.');
       throw new ConflictException('Only draft orders can be submitted.');
     }
-    return this.get(organizationId, orderId);
+    const order = await this.get(organizationId, orderId);
+    await this.audit.record({
+      organizationId,
+      actorId: userId,
+      action: 'order.submitted',
+      entityType: 'purchase_order',
+      entityId: orderId,
+      summary: `Submitted purchase order ${order.reference}`,
+    });
+    return order;
   }
 
   async decide(
@@ -405,6 +425,14 @@ export class PurchaseOrdersService {
     });
     if (updated.count !== 1) await this.explainStateFailure(organizationId, orderId, ['SUBMITTED']);
     const order = await this.get(organizationId, orderId);
+    await this.audit.record({
+      organizationId,
+      actorId: userId,
+      action: approve ? 'order.approved' : 'order.rejected',
+      entityType: 'purchase_order',
+      entityId: orderId,
+      summary: `${approve ? 'Approved' : 'Rejected'} purchase order ${order.reference}`,
+    });
     if (approve) await this.notifySupplier(organizationId, order);
     return order;
   }
@@ -455,7 +483,7 @@ export class PurchaseOrdersService {
     }
   }
 
-  async cancel(organizationId: string, orderId: string) {
+  async cancel(organizationId: string, orderId: string, userId: string) {
     const updated = await this.prisma.purchaseOrder.updateMany({
       where: {
         id: orderId,
@@ -477,17 +505,35 @@ export class PurchaseOrdersService {
         throw new ConflictException('Orders with recorded deliveries cannot be cancelled.');
       throw new ConflictException('This order can no longer be cancelled.');
     }
-    return this.get(organizationId, orderId);
+    const order = await this.get(organizationId, orderId);
+    await this.audit.record({
+      organizationId,
+      actorId: userId,
+      action: 'order.cancelled',
+      entityType: 'purchase_order',
+      entityId: orderId,
+      summary: `Cancelled purchase order ${order.reference}`,
+    });
+    return order;
   }
 
   // Reopening clears the decision so the next submission gets a fresh verdict.
-  async revise(organizationId: string, orderId: string) {
+  async revise(organizationId: string, orderId: string, userId: string) {
     const updated = await this.prisma.purchaseOrder.updateMany({
       where: { id: orderId, organizationId, status: 'REJECTED' },
       data: { status: 'DRAFT', decidedById: null, decidedAt: null, decisionNote: null },
     });
     if (updated.count !== 1) await this.explainStateFailure(organizationId, orderId, ['REJECTED']);
-    return this.get(organizationId, orderId);
+    const order = await this.get(organizationId, orderId);
+    await this.audit.record({
+      organizationId,
+      actorId: userId,
+      action: 'order.revised',
+      entityType: 'purchase_order',
+      entityId: orderId,
+      summary: `Reopened purchase order ${order.reference} for revision`,
+    });
+    return order;
   }
 
   async receive(organizationId: string, orderId: string, userId: string, input: CreateReceiptDto) {
@@ -589,6 +635,16 @@ export class PurchaseOrdersService {
         data: { status: fullyReceived ? 'RECEIVED' : 'PARTIALLY_RECEIVED' },
       });
     });
-    return this.get(organizationId, orderId);
+    const order = await this.get(organizationId, orderId);
+    const units = input.lines.reduce((sum, line) => sum + line.quantity, 0);
+    await this.audit.record({
+      organizationId,
+      actorId: userId,
+      action: 'order.received',
+      entityType: 'purchase_order',
+      entityId: orderId,
+      summary: `Received ${units} ${units === 1 ? 'unit' : 'units'} for purchase order ${order.reference}`,
+    });
+    return order;
   }
 }

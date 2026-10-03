@@ -77,11 +77,17 @@ export class OrganizationsController {
   @Roles('ADMIN')
   @Header('Cache-Control', 'no-store')
   updateMemberRoles(
+    @Req() request: AuthenticatedRequest,
     @Param('organizationId') organizationId: string,
     @Param('memberUserId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) memberUserId: string,
     @Body() input: UpdateMemberRolesDto,
   ) {
-    return this.organizations.updateMemberRoles(organizationId, memberUserId, input);
+    return this.organizations.updateMemberRoles(
+      organizationId,
+      request.principal.user.id,
+      memberUserId,
+      input,
+    );
   }
 
   @Delete(':organizationId/members/:memberUserId')
@@ -90,9 +96,10 @@ export class OrganizationsController {
   @HttpCode(204)
   @Header('Cache-Control', 'no-store')
   removeMember(
+    @Req() request: AuthenticatedRequest,
     @Param('organizationId') organizationId: string,
     @Param('memberUserId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) memberUserId: string,
   ) {
-    return this.organizations.removeMember(organizationId, memberUserId);
+    return this.organizations.removeMember(organizationId, request.principal.user.id, memberUserId);
   }
 }

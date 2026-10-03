@@ -46,10 +46,11 @@ export class OrganizationInvitationsController {
   @HttpCode(204)
   @Header('Cache-Control', 'no-store')
   revoke(
+    @Req() request: AuthenticatedRequest,
     @Param('organizationId') organizationId: string,
     @Param('invitationId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) invitationId: string,
   ) {
-    return this.invitations.revoke(organizationId, invitationId);
+    return this.invitations.revoke(organizationId, request.principal.user.id, invitationId);
   }
 }
 

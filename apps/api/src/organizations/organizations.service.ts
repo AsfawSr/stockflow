@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { AuditService } from '../audit/audit.service';
 import { PageQueryDto } from '../common/list-query.dto';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,7 +19,10 @@ const organizationSelect = {
 
 @Injectable()
 export class OrganizationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async list(userId: string) {
     const memberships = await this.prisma.membership.findMany({
@@ -102,8 +106,13 @@ export class OrganizationsService {
       throw new ConflictException('An organization needs at least one administrator.');
   }
 
-  updateMemberRoles(organizationId: string, memberUserId: string, input: UpdateMemberRolesDto) {
-    return this.prisma.$transaction(async (tx) => {
+  async updateMemberRoles(
+    organizationId: string,
+    actorId: string,
+    memberUserId: string,
+    input: UpdateMemberRolesDto,
+  ) {
+    const member = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM organizations WHERE id = ${organizationId}::uuid FOR UPDATE`;
       const membership = await tx.membership.findUnique({
         where: { organizationId_userId: { organizationId, userId: memberUserId } },
@@ -122,18 +131,36 @@ export class OrganizationsService {
         },
       });
     });
+    await this.audit.record({
+      organizationId,
+      actorId,
+      action: 'member.roles_changed',
+      entityType: 'membership',
+      entityId: memberUserId,
+      summary: `Changed roles for ${member.user.email} to ${member.roles.join(', ')}`,
+    });
+    return member;
   }
 
-  removeMember(organizationId: string, memberUserId: string) {
-    return this.prisma.$transaction(async (tx) => {
+  async removeMember(organizationId: string, actorId: string, memberUserId: string) {
+    const email = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM organizations WHERE id = ${organizationId}::uuid FOR UPDATE`;
       const membership = await tx.membership.findUnique({
         where: { organizationId_userId: { organizationId, userId: memberUserId } },
-        select: { id: true, roles: true },
+        select: { id: true, roles: true, user: { select: { email: true } } },
       });
       if (!membership) throw new NotFoundException('Member not found.');
       await this.requireOtherAdminsRemain(tx, organizationId, membership);
       await tx.membership.delete({ where: { id: membership.id } });
+      return membership.user.email;
+    });
+    await this.audit.record({
+      organizationId,
+      actorId,
+      action: 'member.removed',
+      entityType: 'membership',
+      entityId: memberUserId,
+      summary: `Removed ${email} from the organization`,
     });
   }
 }

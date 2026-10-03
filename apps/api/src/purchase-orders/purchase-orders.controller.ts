@@ -118,10 +118,11 @@ export class PurchaseOrdersController {
   @HttpCode(200)
   @Header('Cache-Control', 'no-store')
   submit(
+    @Req() request: AuthenticatedRequest,
     @Param('organizationId') organizationId: string,
     @Param('orderId', orderIdParam) orderId: string,
   ) {
-    return this.orders.submit(organizationId, orderId);
+    return this.orders.submit(organizationId, orderId, request.principal.user.id);
   }
 
   @Post(':orderId/approve')
@@ -167,10 +168,11 @@ export class PurchaseOrdersController {
   @HttpCode(200)
   @Header('Cache-Control', 'no-store')
   cancel(
+    @Req() request: AuthenticatedRequest,
     @Param('organizationId') organizationId: string,
     @Param('orderId', orderIdParam) orderId: string,
   ) {
-    return this.orders.cancel(organizationId, orderId);
+    return this.orders.cancel(organizationId, orderId, request.principal.user.id);
   }
 
   @Post(':orderId/revise')
@@ -178,10 +180,11 @@ export class PurchaseOrdersController {
   @HttpCode(200)
   @Header('Cache-Control', 'no-store')
   revise(
+    @Req() request: AuthenticatedRequest,
     @Param('organizationId') organizationId: string,
     @Param('orderId', orderIdParam) orderId: string,
   ) {
-    return this.orders.revise(organizationId, orderId);
+    return this.orders.revise(organizationId, orderId, request.principal.user.id);
   }
 
   @Post(':orderId/receipts')

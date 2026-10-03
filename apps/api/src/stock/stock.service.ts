@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { AuditService } from '../audit/audit.service';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -22,7 +23,10 @@ function csv(rows: (string | number | null)[][]): string {
 
 @Injectable()
 export class StockService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async levelsCsv(organizationId: string, query: StockLevelsQueryDto) {
     const { items } = await this.levels(organizationId, {
@@ -231,19 +235,21 @@ export class StockService {
   private async requireProduct(organizationId: string, productId: string) {
     const product = await this.prisma.product.findUnique({
       where: { organizationId_id: { organizationId, id: productId } },
-      select: { id: true },
+      select: { name: true, unit: true },
     });
     if (!product) throw new NotFoundException('Product not found.');
+    return product;
   }
 
   private async requireLocation(organizationId: string, locationId: string, mustBeActive: boolean) {
     const location = await this.prisma.location.findUnique({
       where: { organizationId_id: { organizationId, id: locationId } },
-      select: { archivedAt: true },
+      select: { name: true, archivedAt: true },
     });
     if (!location) throw new NotFoundException('Location not found.');
     if (mustBeActive && location.archivedAt)
       throw new ConflictException('The destination location is archived.');
+    return location;
   }
 
   // Locks existing balance rows for this product in a stable order to serialize writers.
@@ -266,9 +272,9 @@ export class StockService {
   async transfer(organizationId: string, userId: string, input: CreateTransferDto) {
     if (input.fromLocationId === input.toLocationId)
       throw new ConflictException('Choose two different locations.');
-    await this.requireProduct(organizationId, input.productId);
-    await this.requireLocation(organizationId, input.fromLocationId, false);
-    await this.requireLocation(organizationId, input.toLocationId, true);
+    const product = await this.requireProduct(organizationId, input.productId);
+    const from = await this.requireLocation(organizationId, input.fromLocationId, false);
+    const to = await this.requireLocation(organizationId, input.toLocationId, true);
 
     const transferId = await this.prisma.$transaction(async (tx) => {
       const locked = await this.lockLevels(tx, organizationId, input.productId, [
@@ -350,12 +356,20 @@ export class StockService {
       },
       select: { locationId: true, quantity: true },
     });
+    await this.audit.record({
+      organizationId,
+      actorId: userId,
+      action: 'stock.transferred',
+      entityType: 'stock_transfer',
+      entityId: transferId,
+      summary: `Transferred ${input.quantity} ${product.unit} ${product.name} from ${from.name} to ${to.name}`,
+    });
     return { id: transferId, levels };
   }
 
   async adjust(organizationId: string, userId: string, input: CreateAdjustmentDto) {
-    await this.requireProduct(organizationId, input.productId);
-    await this.requireLocation(organizationId, input.locationId, false);
+    const product = await this.requireProduct(organizationId, input.productId);
+    const location = await this.requireLocation(organizationId, input.locationId, false);
 
     const adjustmentId = await this.prisma.$transaction(async (tx) => {
       const locked = await this.lockLevels(tx, organizationId, input.productId, [input.locationId]);
@@ -418,6 +432,14 @@ export class StockService {
         },
       },
       select: { locationId: true, quantity: true },
+    });
+    await this.audit.record({
+      organizationId,
+      actorId: userId,
+      action: 'stock.adjusted',
+      entityType: 'stock_adjustment',
+      entityId: adjustmentId,
+      summary: `Adjusted ${product.name} by ${input.quantity > 0 ? '+' : ''}${input.quantity} ${product.unit} at ${location.name} (${input.reason})`,
     });
     return { id: adjustmentId, levels: level ? [level] : [] };
   }

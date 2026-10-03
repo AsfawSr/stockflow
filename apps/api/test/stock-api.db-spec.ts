@@ -43,6 +43,7 @@ describe('Stock APIs against PostgreSQL', () => {
         organization: transaction.organization,
         membership: transaction.membership,
         accountToken: transaction.accountToken,
+        auditEvent: transaction.auditEvent,
         product: transaction.product,
         supplier: transaction.supplier,
         location: transaction.location,
@@ -492,6 +493,7 @@ describe('Stock APIs against PostgreSQL', () => {
       await prisma.membership.deleteMany({
         where: { organizationId: { in: organizationIds } },
       });
+      await prisma.auditEvent.deleteMany({ where: { organizationId: { in: organizationIds } } });
       await prisma.organization.deleteMany({ where: { id: { in: organizationIds } } });
       await prisma.user.deleteMany({ where: { email: { in: userEmails } } });
       await app.close();

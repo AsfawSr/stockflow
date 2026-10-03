@@ -48,6 +48,7 @@ describe('Invitation APIs against PostgreSQL', () => {
         organization: transaction.organization,
         membership: transaction.membership,
         accountToken: transaction.accountToken,
+        auditEvent: transaction.auditEvent,
         invitation: transaction.invitation,
         $transaction: (callback: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
           callback(transaction),
@@ -364,6 +365,7 @@ describe('Invitation APIs against PostgreSQL', () => {
       expect(memberships).toHaveLength(2);
       expect(await prisma.invitation.count({ where: { organizationId } })).toBe(0);
     } finally {
+      await prisma.auditEvent.deleteMany({ where: { organizationId: { in: organizationIds } } });
       await prisma.invitation.deleteMany({ where: { organizationId: { in: organizationIds } } });
       await prisma.membership.deleteMany({ where: { organizationId: { in: organizationIds } } });
       await prisma.organization.deleteMany({ where: { id: { in: organizationIds } } });

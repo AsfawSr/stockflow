@@ -43,6 +43,7 @@ describe('Member management APIs against PostgreSQL', () => {
         organization: transaction.organization,
         membership: transaction.membership,
         accountToken: transaction.accountToken,
+        auditEvent: transaction.auditEvent,
         invitation: transaction.invitation,
         $transaction: (callback: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
           callback(transaction),
@@ -264,6 +265,7 @@ describe('Member management APIs against PostgreSQL', () => {
       });
       expect(admins).toBe(1);
     } finally {
+      await prisma.auditEvent.deleteMany({ where: { organizationId: { in: organizationIds } } });
       await prisma.membership.deleteMany({ where: { organizationId: { in: organizationIds } } });
       await prisma.organization.deleteMany({ where: { id: { in: organizationIds } } });
       await prisma.user.deleteMany({ where: { email: { in: userEmails } } });
