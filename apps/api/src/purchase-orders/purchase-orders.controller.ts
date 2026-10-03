@@ -41,6 +41,13 @@ export class PurchaseOrdersController {
     return this.orders.list(organizationId, query);
   }
 
+  // Must stay above the :orderId route so 'suggestions' is not parsed as an id.
+  @Get('suggestions')
+  @Header('Cache-Control', 'no-store')
+  suggestions(@Param('organizationId') organizationId: string) {
+    return this.orders.suggestions(organizationId);
+  }
+
   @Get(':orderId')
   @Header('Cache-Control', 'no-store')
   get(

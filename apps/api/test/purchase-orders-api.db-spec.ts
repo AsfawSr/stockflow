@@ -784,4 +784,127 @@ describe('Purchase order workflow against PostgreSQL', () => {
       expect(otherPrices.body.items).toEqual([]);
     });
   }, 60000);
+
+  it('suggests restocking low products from the last confirmed source', async () => {
+    await withApplication(async (app) => {
+      const owner = await registerVerified(app);
+      const seed = await seedOrganization(app, owner.auth);
+      const base = `/api/organizations/${seed.organizationId}/purchase-orders`;
+      const suggestionsUrl = `${base}/suggestions`;
+      const getSuggestions = (auth = owner.auth) =>
+        request(app.getHttpServer()).get(suggestionsUrl).set('Authorization', auth);
+
+      // No reorder points yet, so nothing to suggest.
+      expect((await getSuggestions().expect(200)).body.items).toEqual([]);
+
+      await request(app.getHttpServer())
+        .patch(`/api/organizations/${seed.organizationId}/products/${seed.chargerId}`)
+        .set('Authorization', owner.auth)
+        .send({ reorderPoint: 10 })
+        .expect(200);
+      const bare = await getSuggestions().expect(200);
+      expect(bare.body.items).toEqual([
+        {
+          product: { id: seed.chargerId, sku: 'CHARGER-65', name: 'USB-C Charger', unit: 'piece' },
+          reorderPoint: 10,
+          onHand: 0,
+          suggestedQuantity: 20,
+          supplier: null,
+          unitPrice: null,
+          reference: null,
+        },
+      ]);
+
+      // A confirmed order attaches the supplier and price; its receipt raises on-hand.
+      const created = await request(app.getHttpServer())
+        .post(base)
+        .set('Authorization', owner.auth)
+        .send({ supplierId: seed.supplierId, locationId: seed.locationId })
+        .expect(201);
+      const orderId = created.body.id as string;
+      const withLine = await request(app.getHttpServer())
+        .post(`${base}/${orderId}/lines`)
+        .set('Authorization', owner.auth)
+        .send({ productId: seed.chargerId, quantity: 4, unitPrice: '7.50' })
+        .expect(201);
+      const lineId = withLine.body.lines[0].id as string;
+      await request(app.getHttpServer())
+        .post(`${base}/${orderId}/submit`)
+        .set('Authorization', owner.auth)
+        .send({})
+        .expect(200);
+      await request(app.getHttpServer())
+        .post(`${base}/${orderId}/approve`)
+        .set('Authorization', owner.auth)
+        .send({})
+        .expect(200);
+      await request(app.getHttpServer())
+        .post(`${base}/${orderId}/receipts`)
+        .set('Authorization', owner.auth)
+        .send({ lines: [{ purchaseOrderLineId: lineId, quantity: 4 }] })
+        .expect(201);
+      const sourced = await getSuggestions().expect(200);
+      expect(sourced.body.items).toEqual([
+        {
+          product: { id: seed.chargerId, sku: 'CHARGER-65', name: 'USB-C Charger', unit: 'piece' },
+          reorderPoint: 10,
+          onHand: 4,
+          suggestedQuantity: 16,
+          supplier: { id: seed.supplierId, name: 'Order Supplier' },
+          unitPrice: '7.50',
+          reference: 'PO-0001',
+        },
+      ]);
+
+      // An archived supplier is never proposed, but the shortage still shows.
+      await request(app.getHttpServer())
+        .post(`/api/organizations/${seed.organizationId}/suppliers/${seed.supplierId}/archive`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      const archivedSupplier = await getSuggestions().expect(200);
+      expect(archivedSupplier.body.items[0]).toMatchObject({
+        supplier: null,
+        unitPrice: null,
+        reference: null,
+        suggestedQuantity: 16,
+      });
+      await request(app.getHttpServer())
+        .post(`/api/organizations/${seed.organizationId}/suppliers/${seed.supplierId}/restore`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+
+      // Stock above the reorder point and archived products drop out.
+      await request(app.getHttpServer())
+        .post(`/api/organizations/${seed.organizationId}/stock/adjustments`)
+        .set('Authorization', owner.auth)
+        .send({
+          productId: seed.chargerId,
+          locationId: seed.locationId,
+          quantity: 7,
+          reason: 'Found stock',
+        })
+        .expect(201);
+      expect((await getSuggestions().expect(200)).body.items).toEqual([]);
+      await request(app.getHttpServer())
+        .post(`/api/organizations/${seed.organizationId}/stock/adjustments`)
+        .set('Authorization', owner.auth)
+        .send({
+          productId: seed.chargerId,
+          locationId: seed.locationId,
+          quantity: -5,
+          reason: 'Recount',
+        })
+        .expect(201);
+      expect((await getSuggestions().expect(200)).body.items).toHaveLength(1);
+      await request(app.getHttpServer())
+        .post(`/api/organizations/${seed.organizationId}/products/${seed.chargerId}/archive`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      expect((await getSuggestions().expect(200)).body.items).toEqual([]);
+
+      await request(app.getHttpServer()).get(suggestionsUrl).expect(401);
+      const outsider = await registerVerified(app);
+      await getSuggestions(outsider.auth).expect(404);
+    });
+  }, 60000);
 });

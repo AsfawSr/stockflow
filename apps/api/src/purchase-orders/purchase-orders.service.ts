@@ -156,6 +156,75 @@ export class PurchaseOrdersService {
     };
   }
 
+  // Active products at or below their reorder point, with the last confirmed source.
+  // Suggested quantity restocks to twice the reorder point.
+  async suggestions(organizationId: string) {
+    const rows = (await this.prisma.$queryRaw`
+      WITH on_hand AS (
+        SELECT product_id, SUM(quantity)::int AS total
+        FROM stock_levels
+        WHERE organization_id = ${organizationId}::uuid
+        GROUP BY product_id
+      ),
+      latest_price AS (
+        SELECT DISTINCT ON (l.product_id)
+          l.product_id, l.unit_price, o.number,
+          s.id AS supplier_id, s.name AS supplier_name, s.archived_at AS supplier_archived_at
+        FROM purchase_order_lines l
+        JOIN purchase_orders o ON o.id = l.purchase_order_id
+        JOIN suppliers s ON s.id = o.supplier_id
+        WHERE o.organization_id = ${organizationId}::uuid
+          AND o.status::text IN ('APPROVED', 'PARTIALLY_RECEIVED', 'RECEIVED')
+        ORDER BY l.product_id, o.decided_at DESC, l.id DESC
+      )
+      SELECT p.id, p.sku, p.name, p.unit, p.reorder_point,
+        COALESCE(h.total, 0) AS on_hand,
+        lp.unit_price, lp.number, lp.supplier_id, lp.supplier_name, lp.supplier_archived_at
+      FROM products p
+      LEFT JOIN on_hand h ON h.product_id = p.id
+      LEFT JOIN latest_price lp ON lp.product_id = p.id
+      WHERE p.organization_id = ${organizationId}::uuid
+        AND p.archived_at IS NULL
+        AND p.reorder_point IS NOT NULL
+        AND COALESCE(h.total, 0) <= p.reorder_point
+      ORDER BY p.name ASC, p.id ASC
+    `) as {
+      id: string;
+      sku: string;
+      name: string;
+      unit: string;
+      reorder_point: number;
+      on_hand: number;
+      unit_price: string | null;
+      number: number | null;
+      supplier_id: string | null;
+      supplier_name: string | null;
+      supplier_archived_at: Date | null;
+    }[];
+    return {
+      items: rows.map((row) => {
+        const supplierUsable = row.supplier_id !== null && row.supplier_archived_at === null;
+        return {
+          product: { id: row.id, sku: row.sku, name: row.name, unit: row.unit },
+          reorderPoint: row.reorder_point,
+          onHand: row.on_hand,
+          suggestedQuantity: Math.max(1, row.reorder_point * 2 - row.on_hand),
+          supplier: supplierUsable
+            ? { id: row.supplier_id as string, name: row.supplier_name as string }
+            : null,
+          unitPrice:
+            supplierUsable && row.unit_price !== null
+              ? new Prisma.Decimal(row.unit_price).toFixed(2)
+              : null,
+          reference:
+            supplierUsable && row.number !== null
+              ? `PO-${String(row.number).padStart(4, '0')}`
+              : null,
+        };
+      }),
+    };
+  }
+
   async get(organizationId: string, orderId: string) {
     const order = await this.prisma.purchaseOrder.findUnique({
       where: { organizationId_id: { organizationId, id: orderId } },
