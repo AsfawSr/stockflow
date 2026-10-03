@@ -18,7 +18,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "test:db": "npm run test:db --workspace=@stockflow/api",
-    "test:e2e": "npm run test:e2e --workspace=@stockflow/web"
+    "test:e2e": "npm run test:e2e --workspace=@stockflow/web",
+    "demo:seed": "node scripts/seed-demo.mjs"
   },
   "engines": {
     "node": ">=22.12.0",
