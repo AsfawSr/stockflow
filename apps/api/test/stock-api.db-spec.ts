@@ -92,7 +92,7 @@ describe('Stock APIs against PostgreSQL', () => {
       .expect(201);
     const message = outbox.findLast((mail) => mail.to === email);
     if (!message) throw new Error('Verification email was not captured.');
-    const token = new URLSearchParams(new URL(message.actionUrl).hash.slice(1)).get('token')!;
+    const token = new URLSearchParams(new URL(message.actionUrl!).hash.slice(1)).get('token')!;
     await request(app.getHttpServer()).post('/api/auth/email/verify').send({ token }).expect(200);
     return { auth: `Bearer ${response.body.accessToken as string}`, email };
   }
@@ -434,7 +434,7 @@ describe('Stock APIs against PostgreSQL', () => {
         .send({ email, password, displayName: 'Concurrent Stock User' })
         .expect(201);
       const message = outbox.findLast((mail) => mail.to === email)!;
-      const token = new URLSearchParams(new URL(message.actionUrl).hash.slice(1)).get('token')!;
+      const token = new URLSearchParams(new URL(message.actionUrl!).hash.slice(1)).get('token')!;
       await request(app.getHttpServer()).post('/api/auth/email/verify').send({ token }).expect(200);
       const auth = `Bearer ${registered.body.accessToken as string}`;
       const seedData = await seed(app, auth);

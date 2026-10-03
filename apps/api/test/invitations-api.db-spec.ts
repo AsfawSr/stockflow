@@ -86,10 +86,10 @@ describe('Invitation APIs against PostgreSQL', () => {
 
   function mailToken(recipient: string, path: string) {
     const message = outbox.findLast(
-      (mail) => mail.to === recipient && new URL(mail.actionUrl).pathname === path,
+      (mail) => mail.to === recipient && new URL(mail.actionUrl!).pathname === path,
     );
     if (!message) throw new Error(`Expected email to ${recipient} for ${path}.`);
-    return new URLSearchParams(new URL(message.actionUrl).hash.slice(1)).get('token')!;
+    return new URLSearchParams(new URL(message.actionUrl!).hash.slice(1)).get('token')!;
   }
 
   async function registerVerified(app: INestApplication, email = `${randomUUID()}@example.test`) {

@@ -14,6 +14,7 @@ describe('Purchase order workflow against PostgreSQL', () => {
   let prisma: PrismaService;
   const password = 'purchase order integration passphrase';
   const outbox: AccountEmail[] = [];
+  let failNextMail = false;
 
   beforeAll(() => {
     config({ quiet: true });
@@ -33,6 +34,10 @@ describe('Purchase order workflow against PostgreSQL', () => {
     const withMailer = builder.useValue({
       webOrigin: 'http://127.0.0.1:3000',
       send: async (mail: AccountEmail) => {
+        if (failNextMail) {
+          failNextMail = false;
+          throw new Error('Simulated mail outage');
+        }
         outbox.push(mail);
       },
     });
@@ -71,6 +76,7 @@ describe('Purchase order workflow against PostgreSQL', () => {
     run: (app: INestApplication, database: Prisma.TransactionClient) => Promise<void>,
   ) {
     outbox.length = 0;
+    failNextMail = false;
     const rollback = new Error('Rollback purchase order integration test');
     let app: INestApplication | undefined;
     try {
@@ -97,7 +103,7 @@ describe('Purchase order workflow against PostgreSQL', () => {
       .expect(201);
     const message = outbox.findLast((mail) => mail.to === email);
     if (!message) throw new Error('Verification email was not captured.');
-    const token = new URLSearchParams(new URL(message.actionUrl).hash.slice(1)).get('token')!;
+    const token = new URLSearchParams(new URL(message.actionUrl!).hash.slice(1)).get('token')!;
     await request(app.getHttpServer()).post('/api/auth/email/verify').send({ token }).expect(200);
     return { auth: `Bearer ${response.body.accessToken as string}`, email };
   }
@@ -567,7 +573,7 @@ describe('Purchase order workflow against PostgreSQL', () => {
         .send({ email, password, displayName: 'Concurrent Order User' })
         .expect(201);
       const message = outbox.findLast((mail) => mail.to === email)!;
-      const token = new URLSearchParams(new URL(message.actionUrl).hash.slice(1)).get('token')!;
+      const token = new URLSearchParams(new URL(message.actionUrl!).hash.slice(1)).get('token')!;
       await request(app.getHttpServer()).post('/api/auth/email/verify').send({ token }).expect(200);
       const auth = `Bearer ${registered.body.accessToken as string}`;
 
@@ -1001,6 +1007,93 @@ describe('Purchase order workflow against PostgreSQL', () => {
         .set('Authorization', owner.auth)
         .expect(409);
       expect(closed.body.message).toContain('rejected');
+    });
+  }, 60000);
+
+  it('emails approved orders to supplier contacts without blocking approval', async () => {
+    await withApplication(async (app) => {
+      const owner = await registerVerified(app);
+      const seed = await seedOrganization(app, owner.auth);
+      const base = `/api/organizations/${seed.organizationId}/purchase-orders`;
+      const approveOrder = async (note?: string) => {
+        const draft = await request(app.getHttpServer())
+          .post(base)
+          .set('Authorization', owner.auth)
+          .send({ supplierId: seed.supplierId, locationId: seed.locationId, note: note ?? null })
+          .expect(201);
+        const orderId = draft.body.id as string;
+        await request(app.getHttpServer())
+          .post(`${base}/${orderId}/lines`)
+          .set('Authorization', owner.auth)
+          .send({ productId: seed.chargerId, quantity: 3, unitPrice: '19.99' })
+          .expect(201);
+        await request(app.getHttpServer())
+          .post(`${base}/${orderId}/submit`)
+          .set('Authorization', owner.auth)
+          .expect(200);
+        return request(app.getHttpServer())
+          .post(`${base}/${orderId}/approve`)
+          .set('Authorization', owner.auth)
+          .send({})
+          .expect(200);
+      };
+
+      // Suppliers without a contact address are silently skipped.
+      const quietBefore = outbox.length;
+      await approveOrder();
+      expect(outbox.length).toBe(quietBefore);
+
+      await request(app.getHttpServer())
+        .patch(`/api/organizations/${seed.organizationId}/suppliers/${seed.supplierId}`)
+        .set('Authorization', owner.auth)
+        .send({ email: 'orders@supplier.test' })
+        .expect(200);
+      await request(app.getHttpServer())
+        .patch(`/api/organizations/${seed.organizationId}/locations/${seed.locationId}`)
+        .set('Authorization', owner.auth)
+        .send({ address: 'Dock 4' })
+        .expect(200);
+
+      await approveOrder('Deliver before Friday');
+      const message = outbox.findLast((mail) => mail.to === 'orders@supplier.test');
+      if (!message) throw new Error('Supplier order email was not captured.');
+      expect(message.subject).toContain('Purchase order PO-0002 from Orders ');
+      expect(message.actionUrl).toBeUndefined();
+      expect(message.text).toContain('Hello Order Supplier,');
+      expect(message.text).toContain('- USB-C Charger (CHARGER-65): 3 piece @ 19.99 = 59.97');
+      expect(message.text).toContain('Total: 59.97 USD');
+      expect(message.text).toContain('Deliver to: Order Warehouse, Dock 4');
+      expect(message.text).toContain('Note: Deliver before Friday');
+
+      // A mail outage must not roll back the decision.
+      const outageBefore = outbox.length;
+      failNextMail = true;
+      const approved = await approveOrder();
+      expect(approved.body.status).toBe('APPROVED');
+      expect(outbox.length).toBe(outageBefore);
+
+      // Rejection never notifies the supplier.
+      const draft = await request(app.getHttpServer())
+        .post(base)
+        .set('Authorization', owner.auth)
+        .send({ supplierId: seed.supplierId, locationId: seed.locationId })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post(`${base}/${draft.body.id}/lines`)
+        .set('Authorization', owner.auth)
+        .send({ productId: seed.cableId, quantity: 1, unitPrice: '2.00' })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post(`${base}/${draft.body.id}/submit`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      const rejectBefore = outbox.length;
+      await request(app.getHttpServer())
+        .post(`${base}/${draft.body.id}/reject`)
+        .set('Authorization', owner.auth)
+        .send({ note: 'Not needed' })
+        .expect(200);
+      expect(outbox.length).toBe(rejectBefore);
     });
   }, 60000);
 });

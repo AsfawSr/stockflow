@@ -21,10 +21,10 @@ describe('Authentication and authorization against PostgreSQL', () => {
 
   function mailToken(email: string, path: string) {
     const message = outbox.findLast(
-      (mail) => mail.to === email && new URL(mail.actionUrl).pathname === path,
+      (mail) => mail.to === email && new URL(mail.actionUrl!).pathname === path,
     );
     if (!message) throw new Error('Expected account email was not sent.');
-    return new URLSearchParams(new URL(message.actionUrl).hash.slice(1)).get('token')!;
+    return new URLSearchParams(new URL(message.actionUrl!).hash.slice(1)).get('token')!;
   }
 
   beforeAll(() => {
@@ -388,7 +388,7 @@ describe('Authentication and authorization against PostgreSQL', () => {
       expect(stored.purpose).toBe('VERIFY_EMAIL');
       expect(stored.email).toBe(account.input.email);
       expect(JSON.stringify(stored)).not.toContain(token);
-      expect(new URL(outbox[0].actionUrl).search).toBe('');
+      expect(new URL(outbox[0].actionUrl!).search).toBe('');
       await request(app.getHttpServer())
         .get('/api/organizations')
         .set('Authorization', `Bearer ${account.token}`)

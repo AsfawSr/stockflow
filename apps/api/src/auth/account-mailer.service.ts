@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { createTransport, Transporter } from 'nodemailer';
 import { MailMetrics } from '../health/mail-metrics.service';
 
-export type AccountEmail = { to: string; subject: string; text: string; actionUrl: string };
+export type AccountEmail = { to: string; subject: string; text: string; actionUrl?: string };
 
 @Injectable()
 export class AccountMailer implements OnModuleDestroy {

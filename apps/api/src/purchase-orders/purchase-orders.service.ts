@@ -2,8 +2,10 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { AccountMailer } from '../auth/account-mailer.service';
 import { Prisma, PurchaseOrderStatus } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -90,7 +92,12 @@ function mapOrder(order: OrderDetail) {
 
 @Injectable()
 export class PurchaseOrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(PurchaseOrdersService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mailer: AccountMailer,
+  ) {}
 
   private async requireActiveSupplier(organizationId: string, supplierId: string) {
     const supplier = await this.prisma.supplier.findUnique({
@@ -397,7 +404,55 @@ export class PurchaseOrdersService {
       },
     });
     if (updated.count !== 1) await this.explainStateFailure(organizationId, orderId, ['SUBMITTED']);
-    return this.get(organizationId, orderId);
+    const order = await this.get(organizationId, orderId);
+    if (approve) await this.notifySupplier(organizationId, order);
+    return order;
+  }
+
+  // Best effort: a failed supplier email never rolls back the approval.
+  private async notifySupplier(
+    organizationId: string,
+    order: Awaited<ReturnType<PurchaseOrdersService['get']>>,
+  ) {
+    const [supplier, organization, location] = await Promise.all([
+      this.prisma.supplier.findUnique({
+        where: { organizationId_id: { organizationId, id: order.supplier.id } },
+        select: { name: true, email: true },
+      }),
+      this.prisma.organization.findUnique({
+        where: { id: organizationId },
+        select: { name: true, currency: true },
+      }),
+      this.prisma.location.findUnique({
+        where: { organizationId_id: { organizationId, id: order.location.id } },
+        select: { name: true, address: true },
+      }),
+    ]);
+    if (!supplier?.email || !organization || !location) return;
+    const items = order.lines
+      .map(
+        (line) =>
+          `- ${line.product.name} (${line.product.sku}): ${line.quantity} ${line.product.unit} @ ${line.unitPrice} = ${line.lineTotal}`,
+      )
+      .join('\n');
+    const destination = location.address ? `${location.name}, ${location.address}` : location.name;
+    const text = [
+      `Hello ${supplier.name},`,
+      `${organization.name} approved purchase order ${order.reference}.`,
+      `Items:\n${items}\nTotal: ${order.total} ${organization.currency}`,
+      `Deliver to: ${destination}`,
+      ...(order.note ? [`Note: ${order.note}`] : []),
+      'Please confirm availability and delivery timing by replying to this email.',
+    ].join('\n\n');
+    try {
+      await this.mailer.send({
+        to: supplier.email,
+        subject: `Purchase order ${order.reference} from ${organization.name}`,
+        text,
+      });
+    } catch {
+      this.logger.warn(`Supplier email for ${order.reference} failed; the order stays approved.`);
+    }
   }
 
   async cancel(organizationId: string, orderId: string) {
