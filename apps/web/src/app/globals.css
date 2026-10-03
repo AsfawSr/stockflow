@@ -1588,3 +1588,118 @@ dd {
     transition: none !important;
   }
 }
+
+.print-document {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 32px 24px 48px;
+  background: var(--surface);
+  min-height: 100vh;
+}
+.print-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.print-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 14px;
+}
+.print-header h1 {
+  margin: 2px 0 0;
+  font-size: 26px;
+}
+.print-eyebrow {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+.print-org {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: right;
+}
+.print-org span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.print-parties {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 24px;
+  margin: 22px 0;
+}
+.print-parties h2,
+.print-note h2 {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.print-parties h2:first-child {
+  margin-top: 0;
+}
+.print-parties p,
+.print-note p {
+  margin: 2px 0;
+}
+.print-note {
+  margin-bottom: 22px;
+}
+.print-lines-wrapper {
+  overflow-x: auto;
+}
+.print-lines {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.print-lines th {
+  text-align: left;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--ink);
+  padding: 8px 10px;
+}
+.print-lines td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.print-lines tfoot td {
+  border-bottom: none;
+  border-top: 2px solid var(--ink);
+  font-weight: 600;
+}
+.print-lines tfoot td:first-child {
+  text-align: right;
+}
+.print-footer {
+  margin-top: 36px;
+  color: var(--muted);
+  font-size: 12px;
+}
+@media print {
+  body {
+    background: #ffffff;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-document {
+    max-width: none;
+    padding: 0;
+    min-height: 0;
+  }
+}

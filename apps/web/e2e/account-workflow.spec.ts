@@ -415,6 +415,20 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await page.getByRole('button', { name: 'Record delivery', exact: true }).click();
   await expect(page.getByText('Received', { exact: true })).toBeVisible();
   await expect(page.getByText('2 receipts', { exact: true })).toBeVisible();
+
+  // The print view renders a clean standalone document for the order.
+  await page.getByRole('link', { name: 'Print view', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'PO-0001', exact: true })).toBeVisible();
+  await expect(page.getByText('Status: Received', { exact: true })).toBeVisible();
+  await expect(page.getByText('sales@nile.test', { exact: true })).toBeVisible();
+  await expect(page.getByText('Industrial Zone 4', { exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: '10 piece', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: '255.00 ETB', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Print', exact: true })).toBeVisible();
+  await expect(page.locator('.app-shell')).toHaveCount(0);
+  await checkLayouts(page);
+  await page.getByRole('link', { name: 'Back to order', exact: true }).click();
+  await expect(page.getByText('2 receipts', { exact: true })).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath('order-received-desktop.png'),
     fullPage: true,

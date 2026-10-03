@@ -107,6 +107,12 @@ export default async function PurchaseOrderPage({
           </div>
         </div>
         <div className="button-row order-actions">
+          <Link
+            className="secondary-button"
+            href={`/workspace/${organization.id}/purchase-orders/${order.id}/print`}
+          >
+            Print view
+          </Link>
           {purchaser && draft && (
             <OrderTransitionButton
               organizationId={organization.id}
