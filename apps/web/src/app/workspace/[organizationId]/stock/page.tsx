@@ -161,6 +161,9 @@ export default async function StockPage({
           <a className="secondary-button" href={exportHref} download>
             Export CSV
           </a>
+          <Link className="secondary-button" href={`/workspace/${organization.id}/stock/valuation`}>
+            Valuation
+          </Link>
         </div>
       </form>
 

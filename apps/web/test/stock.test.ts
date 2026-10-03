@@ -7,11 +7,38 @@ import {
   stockLevelListSchema,
   stockMovementListSchema,
   stockMovementTypeSchema,
+  stockValuationSchema,
   transferInputSchema,
 } from '../src/lib/contracts';
 
 const uuid = '8ed13b94-fd8b-4079-848e-f22edaa8ce05';
 const otherUuid = '2b8fa8f2-15a5-4a37-a1a5-0e6ad1c2b6c1';
+
+test('validates valuation reports with nullable costs', () => {
+  const item = {
+    product: { id: uuid, sku: 'CHARGER-65', name: 'USB-C Charger', unit: 'piece' },
+    onHand: 9,
+    averageCost: '5.20',
+    value: '46.80',
+  };
+  assert.equal(
+    stockValuationSchema.safeParse({ items: [item], totalValue: '46.80' }).success,
+    true,
+  );
+  assert.equal(
+    stockValuationSchema.safeParse({
+      items: [{ ...item, averageCost: null, value: null }],
+      totalValue: '0.00',
+    }).success,
+    true,
+  );
+  assert.equal(
+    stockValuationSchema.safeParse({ items: [{ ...item, value: '46.8' }], totalValue: '46.80' })
+      .success,
+    false,
+  );
+  assert.equal(stockValuationSchema.safeParse({ items: [item] }).success, false);
+});
 
 test('validates transfer input', () => {
   assert.deepEqual(

@@ -412,6 +412,17 @@ export const stockLevelListSchema = z.object({
   page: z.number().int().positive(),
   pageSize: z.number().int().positive(),
 });
+export const stockValuationSchema = z.object({
+  items: z.array(
+    z.object({
+      product: orderProductSchema,
+      onHand: z.number().int(),
+      averageCost: moneySchema.nullable(),
+      value: moneySchema.nullable(),
+    }),
+  ),
+  totalValue: moneySchema,
+});
 export const stockMovementListSchema = z.object({
   items: z.array(
     z.object({

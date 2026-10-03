@@ -602,6 +602,19 @@ test('account access, cookie privacy, organization selection, and revoked permis
   expect(movementsCsv.status()).toBe(200);
   expect((await movementsCsv.text()).split('\r\n').filter(Boolean)).toHaveLength(6);
 
+  // Valuation prices the remaining stock at the weighted average receipt cost.
+  await page.getByRole('link', { name: 'Stock', exact: true }).click();
+  await page.getByRole('link', { name: 'Valuation', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Inventory valuation', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('Total 229.50 ETB', { exact: true })).toBeVisible();
+  const valuationRow = page.getByRole('row', { name: /USB-C Charger 65W/ });
+  await expect(valuationRow.getByRole('cell', { name: '9 piece', exact: true })).toBeVisible();
+  await expect(valuationRow.getByRole('cell', { name: '25.50 ETB', exact: true })).toBeVisible();
+  await expect(valuationRow.getByRole('cell', { name: '229.50 ETB', exact: true })).toBeVisible();
+  await checkLayouts(page);
+
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
 
