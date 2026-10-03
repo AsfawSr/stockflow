@@ -425,6 +425,16 @@ export class PurchaseOrdersService {
     return this.get(organizationId, orderId);
   }
 
+  // Reopening clears the decision so the next submission gets a fresh verdict.
+  async revise(organizationId: string, orderId: string) {
+    const updated = await this.prisma.purchaseOrder.updateMany({
+      where: { id: orderId, organizationId, status: 'REJECTED' },
+      data: { status: 'DRAFT', decidedById: null, decidedAt: null, decisionNote: null },
+    });
+    if (updated.count !== 1) await this.explainStateFailure(organizationId, orderId, ['REJECTED']);
+    return this.get(organizationId, orderId);
+  }
+
   async receive(organizationId: string, orderId: string, userId: string, input: CreateReceiptDto) {
     const requested = new Map<string, number>();
     for (const line of input.lines) {

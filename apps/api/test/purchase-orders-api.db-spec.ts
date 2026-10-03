@@ -907,4 +907,100 @@ describe('Purchase order workflow against PostgreSQL', () => {
       await getSuggestions(outsider.auth).expect(404);
     });
   }, 60000);
+
+  it('reopens rejected orders as drafts for revision and resubmission', async () => {
+    await withApplication(async (app, database) => {
+      const owner = await registerVerified(app);
+      const seed = await seedOrganization(app, owner.auth);
+      const base = `/api/organizations/${seed.organizationId}/purchase-orders`;
+
+      const draft = await request(app.getHttpServer())
+        .post(base)
+        .set('Authorization', owner.auth)
+        .send({ supplierId: seed.supplierId, locationId: seed.locationId })
+        .expect(201);
+      const orderId = draft.body.id as string;
+      const line = await request(app.getHttpServer())
+        .post(`${base}/${orderId}/lines`)
+        .set('Authorization', owner.auth)
+        .send({ productId: seed.chargerId, quantity: 10, unitPrice: '5.00' })
+        .expect(201);
+      const lineId = line.body.lines[0].id as string;
+
+      // Only rejected orders can be revised.
+      await request(app.getHttpServer())
+        .post(`${base}/${orderId}/revise`)
+        .set('Authorization', owner.auth)
+        .expect(409);
+      await request(app.getHttpServer())
+        .post(`${base}/${orderId}/submit`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      await request(app.getHttpServer())
+        .post(`${base}/${orderId}/revise`)
+        .set('Authorization', owner.auth)
+        .expect(409);
+      await request(app.getHttpServer())
+        .post(`${base}/${orderId}/reject`)
+        .set('Authorization', owner.auth)
+        .send({ note: 'Budget exceeded' })
+        .expect(200);
+
+      // Reviewers without purchasing rights cannot reopen; outsiders see nothing.
+      const warehouse = await addMember(database, app, seed.organizationId, ['WAREHOUSE']);
+      await request(app.getHttpServer())
+        .post(`${base}/${orderId}/revise`)
+        .set('Authorization', warehouse.auth)
+        .expect(403);
+      const outsider = await registerVerified(app);
+      await request(app.getHttpServer())
+        .post(`${base}/${orderId}/revise`)
+        .set('Authorization', outsider.auth)
+        .expect(404);
+      await request(app.getHttpServer()).post(`${base}/${orderId}/revise`).expect(401);
+
+      const revised = await request(app.getHttpServer())
+        .post(`${base}/${orderId}/revise`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      expect(revised.body.status).toBe('DRAFT');
+      expect(revised.body.decidedBy).toBeNull();
+      expect(revised.body.decidedAt).toBeNull();
+      expect(revised.body.decisionNote).toBeNull();
+      expect(revised.body.lines).toHaveLength(1);
+
+      // The reopened draft is fully editable and goes through approval again.
+      await request(app.getHttpServer())
+        .patch(`${base}/${orderId}/lines/${lineId}`)
+        .set('Authorization', owner.auth)
+        .send({ quantity: 5, unitPrice: '4.50' })
+        .expect(200);
+      await request(app.getHttpServer())
+        .post(`${base}/${orderId}/submit`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      const approved = await request(app.getHttpServer())
+        .post(`${base}/${orderId}/approve`)
+        .set('Authorization', owner.auth)
+        .send({})
+        .expect(200);
+      expect(approved.body.status).toBe('APPROVED');
+      expect(approved.body.total).toBe('22.50');
+
+      // Approved and cancelled orders stay closed to revision.
+      await request(app.getHttpServer())
+        .post(`${base}/${orderId}/revise`)
+        .set('Authorization', owner.auth)
+        .expect(409);
+      await request(app.getHttpServer())
+        .post(`${base}/${orderId}/cancel`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      const closed = await request(app.getHttpServer())
+        .post(`${base}/${orderId}/revise`)
+        .set('Authorization', owner.auth)
+        .expect(409);
+      expect(closed.body.message).toContain('rejected');
+    });
+  }, 60000);
 });

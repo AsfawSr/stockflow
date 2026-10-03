@@ -173,6 +173,17 @@ export class PurchaseOrdersController {
     return this.orders.cancel(organizationId, orderId);
   }
 
+  @Post(':orderId/revise')
+  @Roles('ADMIN', 'PURCHASER')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  revise(
+    @Param('organizationId') organizationId: string,
+    @Param('orderId', orderIdParam) orderId: string,
+  ) {
+    return this.orders.revise(organizationId, orderId);
+  }
+
   @Post(':orderId/receipts')
   @Roles('ADMIN', 'WAREHOUSE')
   @HttpCode(201)
