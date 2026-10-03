@@ -211,6 +211,9 @@ export default async function WorkspacePage({
                   {members.data.total} {members.data.total === 1 ? 'member' : 'members'}
                 </span>
               )}
+              <Link className="secondary-button" href={`/workspace/${organization.id}/audit`}>
+                Audit log
+              </Link>
               <InviteMemberButton organizationId={organization.id} />
             </div>
           </div>

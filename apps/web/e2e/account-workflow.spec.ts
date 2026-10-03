@@ -93,6 +93,9 @@ test.afterAll(async () => {
     await database.query('DELETE FROM invitations WHERE organization_id = ANY($1::uuid[])', [
       ownedIds,
     ]);
+    await database.query('DELETE FROM audit_events WHERE organization_id = ANY($1::uuid[])', [
+      ownedIds,
+    ]);
     await database.query(
       'DELETE FROM memberships WHERE organization_id = ANY($1::uuid[]) AND user_id = ANY($2::uuid[])',
       [ownedIds, userIds],
@@ -612,6 +615,33 @@ test('account access, cookie privacy, organization selection, and revoked permis
   );
   await expect(page.locator('.activity-list li').first()).toContainText('Adjustment');
   await expect(page.locator('.activity-list li').first()).toContainText('at Main Warehouse');
+
+  // Administrators can trace every workspace action in the audit log.
+  await page.getByRole('link', { name: 'Audit log', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Audit log', exact: true })).toBeVisible();
+  const auditRows = page.locator('tbody tr');
+  await expect(auditRows.first()).toContainText(
+    'Adjusted USB-C Charger 65W by -1 piece at Main Warehouse (Damaged unit)',
+  );
+  await expect(auditRows.first()).toContainText('stock.adjusted');
+  await expect(
+    page.getByRole('cell', {
+      name: 'Transferred 4 piece USB-C Charger 65W from Main Warehouse to Retail Store',
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'Approved purchase order PO-0001', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'Received 6 units for purchase order PO-0001', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('cell', { name: 'Reopened purchase order PO-0003 for revision', exact: true }),
+  ).toBeVisible();
+  await checkLayouts(page);
+  await page.getByRole('link', { name: 'Back to overview', exact: true }).click();
+  await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
 
   // Reorder suggestions surface shortages with the last confirmed supplier and price.
   await page.getByRole('link', { name: 'Purchase orders', exact: true }).click();

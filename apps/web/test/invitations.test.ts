@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  auditListSchema,
   invitationListSchema,
   invitationSchema,
   invitationsSchema,
@@ -11,6 +12,41 @@ import {
 } from '../src/lib/contracts';
 
 const uuid = '8ed13b94-fd8b-4079-848e-f22edaa8ce05';
+
+test('validates paginated audit logs with nullable actors', () => {
+  const event = {
+    id: uuid,
+    action: 'order.approved',
+    entityType: 'purchase_order',
+    entityId: uuid,
+    summary: 'Approved purchase order PO-0001',
+    actor: { id: uuid, displayName: 'Admin User' },
+    createdAt: new Date().toISOString(),
+  };
+  assert.equal(
+    auditListSchema.safeParse({ items: [event], total: 1, page: 1, pageSize: 20 }).success,
+    true,
+  );
+  assert.equal(
+    auditListSchema.safeParse({
+      items: [{ ...event, actor: null, entityId: null }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }).success,
+    true,
+  );
+  assert.equal(
+    auditListSchema.safeParse({
+      items: [{ ...event, summary: '' }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }).success,
+    false,
+  );
+  assert.equal(auditListSchema.safeParse({ items: [event] }).success, false);
+});
 
 test('validates paginated member and invitation lists', () => {
   const member = {

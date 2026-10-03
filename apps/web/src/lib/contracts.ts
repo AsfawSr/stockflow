@@ -60,6 +60,22 @@ export const invitationListSchema = z.object({
   page: z.number().int().positive(),
   pageSize: z.number().int().positive(),
 });
+export const auditListSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.uuid(),
+      action: z.string().min(1),
+      entityType: z.string().min(1),
+      entityId: z.uuid().nullable(),
+      summary: z.string().min(1),
+      actor: z.object({ id: z.uuid(), displayName: z.string().min(1) }).nullable(),
+      createdAt: z.iso.datetime(),
+    }),
+  ),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
 export const memberRolesInputSchema = z.object({
   roles: z.array(roleSchema).min(1, 'Choose at least one role.'),
 });
