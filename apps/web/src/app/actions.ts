@@ -473,6 +473,7 @@ const orderTransitions = {
   submit: 'Order submitted for approval.',
   approve: 'Order approved.',
   cancel: 'Order cancelled.',
+  revise: 'Order reopened as a draft.',
 } as const;
 
 export async function transitionOrderAction(

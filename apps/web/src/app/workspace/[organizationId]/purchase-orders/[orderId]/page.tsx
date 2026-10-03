@@ -130,6 +130,16 @@ export default async function PurchaseOrderPage({
               <RejectOrderButton organizationId={organization.id} orderId={order.id} />
             </>
           )}
+          {purchaser && order.status === 'REJECTED' && (
+            <OrderTransitionButton
+              organizationId={organization.id}
+              orderId={order.id}
+              transition="revise"
+              label="Revise order"
+              pendingLabel="Reopening..."
+              primary
+            />
+          )}
           {canCancel && (
             <OrderTransitionButton
               organizationId={organization.id}

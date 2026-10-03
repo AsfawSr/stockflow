@@ -409,6 +409,39 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await page.getByRole('button', { name: 'Cancel order', exact: true }).click();
   await expect(page.getByText('Cancelled', { exact: true })).toBeVisible();
 
+  // A rejected order reopens as a draft for revision and goes through approval again.
+  await page.getByRole('link', { name: 'Purchase orders', exact: true }).click();
+  await page.getByRole('button', { name: 'New order', exact: true }).click();
+  await orderDialog
+    .getByLabel('Supplier', { exact: true })
+    .selectOption({ label: 'Nile Electronics' });
+  await orderDialog
+    .getByLabel('Deliver to', { exact: true })
+    .selectOption({ label: 'Main Warehouse' });
+  await orderDialog.getByRole('button', { name: 'Create draft', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'PO-0003', exact: true })).toBeVisible();
+  await page
+    .getByLabel('Product', { exact: true })
+    .selectOption({ label: 'USB-C_65W.01 · USB-C Charger 65W' });
+  await page.getByLabel('Quantity', { exact: true }).fill('2');
+  await page.getByRole('button', { name: 'Add line', exact: true }).click();
+  await expect(page.getByRole('cell', { name: '51.00', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Submit for approval', exact: true }).click();
+  await expect(page.getByText('Awaiting approval', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Reject', exact: true }).click();
+  const rejectDialog = page.getByRole('dialog', { name: 'Reject order', exact: true });
+  await rejectDialog
+    .getByLabel('Why is this order rejected?', { exact: true })
+    .fill('Budget exceeded');
+  await rejectDialog.getByRole('button', { name: 'Reject order', exact: true }).click();
+  await expect(page.getByText('Rejected', { exact: true })).toBeVisible();
+  await expect(page.getByText('Budget exceeded', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Revise order', exact: true }).click();
+  await expect(page.getByText('Draft', { exact: true })).toBeVisible();
+  await expect(page.getByText('Budget exceeded', { exact: false })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Cancel order', exact: true }).click();
+  await expect(page.getByText('Cancelled', { exact: true })).toBeVisible();
+
   // The supplier price history lists the confirmed price with its source order.
   await page.getByRole('link', { name: 'Suppliers', exact: true }).click();
   await page.getByRole('link', { name: 'Nile Electronics', exact: true }).click();

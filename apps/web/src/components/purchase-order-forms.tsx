@@ -1,7 +1,17 @@
 'use client';
 
 import { useActionState, useEffect, useRef, useState } from 'react';
-import { Check, ClipboardList, PackageCheck, Plus, Send, Trash2, X, XCircle } from 'lucide-react';
+import {
+  Check,
+  ClipboardList,
+  PackageCheck,
+  Plus,
+  RotateCcw,
+  Send,
+  Trash2,
+  X,
+  XCircle,
+} from 'lucide-react';
 import {
   addOrderLineAction,
   createPurchaseOrderAction,
@@ -286,13 +296,13 @@ export function OrderTransitionButton({
 }: {
   organizationId: string;
   orderId: string;
-  transition: 'submit' | 'approve' | 'cancel';
+  transition: 'submit' | 'approve' | 'cancel' | 'revise';
   label: string;
   pendingLabel: string;
   primary?: boolean;
 }) {
   const [state, action] = useActionState(transitionOrderAction, {} as FormState);
-  const icons = { submit: Send, approve: Check, cancel: XCircle } as const;
+  const icons = { submit: Send, approve: Check, cancel: XCircle, revise: RotateCcw } as const;
   const Icon = icons[transition];
   return (
     <form action={action} className="row-action-form">
