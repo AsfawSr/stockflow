@@ -623,6 +623,18 @@ To override the API address, create `apps/web/.env.local` using
 setting; it does not need a `NEXT_PUBLIC_` prefix. Restart Next.js after changing it.
 Both development servers bind to the local machine only.
 
+### Demo data
+
+With both development servers running, `npm run demo:seed` builds a ready-to-tour
+workspace through the real API — no direct database writes — so every ledger
+entry, audit event, price history row, and metric is produced by the same code
+paths the application uses. The script signs in as `demo@example.test` (creating
+and self-verifying the account from the file mail transport if needed) and seeds
+a catalog, three suppliers, three locations, five purchase orders in different
+states, transfers, and adjustments; it prints the credentials and workspace URL
+when done. Each run creates a fresh organization for the demo user. Override
+`DEMO_EMAIL`, `DEMO_PASSWORD`, `STOCKFLOW_API`, or `STOCKFLOW_WEB` to retarget it.
+
 ## Deployment
 
 Both applications ship as production container images built from the repository
@@ -816,9 +828,11 @@ PDF dependency. Milestone 20 adds time to the dashboard: the overview shows an
 eight-week activity table of new orders, received units, and stock movements,
 bucketed by ISO week in UTC. Milestone 21 closes the supplier email loop: each
 organization can set a reply-to address in its profile, enforced lowercase by
-a database check and attached to outgoing order mail. Possible next steps:
-archiving entire organizations, or a seeded demo workspace for first-run
-exploration.
+a database check and attached to outgoing order mail. Milestone 22 makes the
+project easy to show: `npm run demo:seed` builds a complete demo workspace
+through the public API with orders in every state, stock history, and metrics.
+Possible next steps: archiving entire organizations, or CSV import for the
+product catalog.
 
 ## Commit Workflow
 
