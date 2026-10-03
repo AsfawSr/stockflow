@@ -8,6 +8,7 @@ import {
   purchaseOrderListSchema,
   purchaseOrderSchema,
   rejectInputSchema,
+  reorderSuggestionListSchema,
   supplierPriceListSchema,
 } from '../src/lib/contracts';
 
@@ -28,6 +29,34 @@ test('validates supplier price lists with strict money strings', () => {
   );
   assert.equal(
     supplierPriceListSchema.safeParse({ items: [{ ...item, reference: '' }] }).success,
+    false,
+  );
+});
+
+test('validates reorder suggestion lists with nullable sourcing', () => {
+  const item = {
+    product: { id: uuid, sku: 'CHARGER-65', name: 'USB-C Charger', unit: 'piece' },
+    reorderPoint: 10,
+    onHand: 4,
+    suggestedQuantity: 16,
+    supplier: { id: uuid, name: 'Nile Electronics' },
+    unitPrice: '25.50',
+    reference: 'PO-0001',
+  };
+  assert.equal(reorderSuggestionListSchema.safeParse({ items: [item] }).success, true);
+  assert.equal(
+    reorderSuggestionListSchema.safeParse({
+      items: [{ ...item, supplier: null, unitPrice: null, reference: null }],
+    }).success,
+    true,
+  );
+  assert.equal(reorderSuggestionListSchema.safeParse({ items: [] }).success, true);
+  assert.equal(
+    reorderSuggestionListSchema.safeParse({ items: [{ ...item, unitPrice: '25.5' }] }).success,
+    false,
+  );
+  assert.equal(
+    reorderSuggestionListSchema.safeParse({ items: [{ ...item, suggestedQuantity: 0 }] }).success,
     false,
   );
 });

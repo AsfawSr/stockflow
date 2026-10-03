@@ -339,6 +339,19 @@ export type SupplierPrice = {
   reference: string;
   decidedAt: string;
 };
+export const reorderSuggestionListSchema = z.object({
+  items: z.array(
+    z.object({
+      product: orderProductSchema,
+      reorderPoint: z.number().int().nonnegative(),
+      onHand: z.number().int(),
+      suggestedQuantity: z.number().int().positive(),
+      supplier: orderPartySchema.nullable(),
+      unitPrice: moneySchema.nullable(),
+      reference: z.string().min(1).nullable(),
+    }),
+  ),
+});
 
 export const stockMovementTypeSchema = z.enum([
   'RECEIPT',

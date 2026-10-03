@@ -80,19 +80,27 @@ export default async function PurchaseOrdersPage({
           <p className="eyebrow">PROCUREMENT</p>
           <h1>Purchase orders</h1>
         </div>
-        {purchaser && suppliers?.ok && locations?.ok && (
-          <CreateOrderButton
-            organizationId={organization.id}
-            suppliers={suppliers.data.items.map((supplier) => ({
-              id: supplier.id,
-              label: supplier.name,
-            }))}
-            locations={locations.data.items.map((location) => ({
-              id: location.id,
-              label: location.name,
-            }))}
-          />
-        )}
+        <div className="button-row">
+          <Link
+            className="secondary-button"
+            href={`/workspace/${organization.id}/purchase-orders/suggestions`}
+          >
+            Reorder suggestions
+          </Link>
+          {purchaser && suppliers?.ok && locations?.ok && (
+            <CreateOrderButton
+              organizationId={organization.id}
+              suppliers={suppliers.data.items.map((supplier) => ({
+                id: supplier.id,
+                label: supplier.name,
+              }))}
+              locations={locations.data.items.map((location) => ({
+                id: location.id,
+                label: location.name,
+              }))}
+            />
+          )}
+        </div>
       </div>
 
       <form className="catalog-toolbar" action={`/workspace/${organization.id}/purchase-orders`}>

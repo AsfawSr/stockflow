@@ -548,6 +548,42 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await expect(page.locator('.activity-list li').first()).toContainText('Adjustment');
   await expect(page.locator('.activity-list li').first()).toContainText('at Main Warehouse');
 
+  // Reorder suggestions surface shortages with the last confirmed supplier and price.
+  await page.getByRole('link', { name: 'Purchase orders', exact: true }).click();
+  await page.getByRole('link', { name: 'Reorder suggestions', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Reorder suggestions', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('Nothing to reorder', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Products', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit USB-C_65W.01', exact: true }).click();
+  const raiseDialog = page.getByRole('dialog', { name: 'Edit USB-C_65W.01', exact: true });
+  await raiseDialog.getByLabel('Reorder point (optional)', { exact: true }).fill('9');
+  await raiseDialog.getByRole('button', { name: 'Save product', exact: true }).click();
+  await expect(raiseDialog).not.toBeVisible();
+  await page.getByRole('link', { name: 'Purchase orders', exact: true }).click();
+  await page.getByRole('link', { name: 'Reorder suggestions', exact: true }).click();
+  const suggestionRow = page.getByRole('row', { name: /USB-C Charger 65W/ });
+  await expect(suggestionRow.getByRole('cell', { name: '9 piece', exact: true })).toHaveCount(2);
+  await expect(suggestionRow.getByRole('cell', { name: '9', exact: true })).toBeVisible();
+  await expect(
+    suggestionRow.getByRole('cell', { name: 'Nile Electronics', exact: true }),
+  ).toBeVisible();
+  await expect(
+    suggestionRow.getByRole('cell', { name: '25.50 ETB (PO-0001)', exact: true }),
+  ).toBeVisible();
+  await checkLayouts(page);
+  await page.getByRole('link', { name: 'All purchase orders', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Purchase orders', exact: true })).toBeVisible();
+  // Restore the original reorder point so later low-stock expectations hold.
+  await page.getByRole('link', { name: 'Products', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit USB-C_65W.01', exact: true }).click();
+  await raiseDialog.getByLabel('Reorder point (optional)', { exact: true }).fill('4');
+  await raiseDialog.getByRole('button', { name: 'Save product', exact: true }).click();
+  await expect(raiseDialog).not.toBeVisible();
+  await page.getByRole('link', { name: 'Overview', exact: true }).click();
+  await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
+
   // Invite, revoke, and re-invite the outsider before their account exists.
   await page.getByRole('button', { name: 'Invite member', exact: true }).click();
   const inviteDialog = page.getByRole('dialog', { name: 'Invite member', exact: true });
