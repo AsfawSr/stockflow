@@ -244,6 +244,12 @@ rejection reason belongs to exactly one submission cycle and the next reviewer
 starts clean. The reopened draft is fully editable and goes through submission
 and approval again. Approved, cancelled, and in-flight orders cannot be revised.
 
+Every order also has a print view: a standalone, light-styled document with the
+supplier's contact block, the delivery address, dates, lines, and totals,
+reachable from the order detail screen. Printing uses the browser (and its
+print-to-PDF) rather than a server-side PDF dependency; screen-only controls
+are hidden by print styles.
+
 Approval also notifies the supplier: when the supplier record has an email
 address, the decision sends a plain-text purchase order (lines, totals in the
 organization currency, destination with address, and any order note) through
@@ -796,9 +802,11 @@ valuation report derives weighted average costs from receipt history and shows
 per-product and total on-hand value, excluding stock whose cost is unknown.
 Milestone 18 grades the partners: each supplier screen now shows confirmed and
 open order counts, the unit fill rate, and the average approval-to-delivery
-lead time, all derived from existing order history. Possible next steps:
-org-level settings for the order email sender identity, or a printable
-purchase order document.
+lead time, all derived from existing order history. Milestone 19 adds a
+printable purchase order document — a standalone print view with supplier and
+delivery details rendered for the browser's print-to-PDF, with no server-side
+PDF dependency. Possible next steps: org-level settings for the order email
+sender identity, or dashboard trends over time.
 
 ## Commit Workflow
 
