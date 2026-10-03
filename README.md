@@ -215,6 +215,7 @@ and the decision records who decided and when.
 | POST | `/:orderId/submit` | Draft with at least one line becomes `SUBMITTED`. |
 | POST | `/:orderId/approve` `/reject` | Submitted orders only; rejection requires a note. |
 | POST | `/:orderId/cancel` | Draft/submitted orders, or approved orders with no receipts. |
+| POST | `/:orderId/revise` | Rejected orders reopen as drafts; the decision fields are cleared for a fresh verdict. |
 | POST | `/:orderId/receipts` | Approved or partially received orders; posts the delivery to the ledger. |
 
 Receiving locks the order row, so competing receipts for the last remaining units
@@ -227,6 +228,12 @@ products, and cross-tenant references are rejected. Prices are returned as fixed
 two-decimal strings computed with decimal arithmetic, never floats. The tests
 cover the full lifecycle, the state machine, role separation, isolation, and
 committed-data concurrency for receipts and numbering.
+
+Rejection is no longer terminal: purchasers can revise a rejected order, which
+returns it to `DRAFT` with lines intact and the decision fields cleared, so the
+rejection reason belongs to exactly one submission cycle and the next reviewer
+starts clean. The reopened draft is fully editable and goes through submission
+and approval again. Approved, cancelled, and in-flight orders cannot be revised.
 
 `GET .../purchase-orders/suggestions` turns reorder points into a shopping list:
 every active product whose summed on-hand balance is at or below its reorder
@@ -718,8 +725,10 @@ price screen, and pre-filled with a provenance hint when adding draft order
 lines. Milestone 12 closes the restocking loop: a reorder suggestions screen
 lists products at or below their reorder point with an order-up-to-twice-the-
 reorder-point quantity and the last confirmed supplier and price for each.
-Possible next steps: revise-and-resubmit for rejected orders, or creating a
-draft order directly from a reorder suggestion.
+Milestone 13 makes rejection recoverable: purchasers reopen rejected orders as
+editable drafts with the decision cleared, then resubmit them for a fresh
+verdict. Possible next steps: creating a draft order directly from a reorder
+suggestion, or supplier-facing order emails.
 
 ## Commit Workflow
 
