@@ -275,6 +275,7 @@ cover the remaining hand-entered movements.
 | GET | `/movements/export` | The history as CSV with the same filters; fields with commas, quotes, or line breaks are escaped. |
 | POST | `/transfers` | Move a positive quantity between two different locations; optional note. |
 | POST | `/adjustments` | Positive or negative correction with a required reason; zero is rejected. |
+| GET | `/valuation` | On-hand value per product at the weighted average receipt cost, with the organization total. |
 
 A transfer writes one `TRANSFER_OUT` and one `TRANSFER_IN` movement plus the
 transfer record in a single transaction; an adjustment writes one `ADJUSTMENT`
@@ -293,6 +294,18 @@ every boundary
 (insufficient stock, same location, zero or unreasoned adjustments, archived
 destinations, cross-tenant references), role separation, and committed-data
 concurrency for simultaneous transfers of the same stock.
+
+`GET .../stock/valuation` prices what is on the shelves: every product with a
+positive summed balance appears with its weighted average unit cost — total
+received value divided by total received quantity across all deliveries — and
+its on-hand value, computed with decimal arithmetic and returned as fixed
+two-decimal strings alongside the organization total. Stock that never arrived
+through a delivery (for example, opening balances entered as adjustments) has
+no known cost; it is listed with null cost and value and excluded from the
+total rather than silently priced at zero. The valuation screen is linked from
+the stock page. Tests cover the averaging across multiple deliveries at
+different prices, write-offs, cost-less stock, zero balances, and tenant
+isolation.
 
 ## Invitation API
 
@@ -769,8 +782,11 @@ approving an order emails it to the supplier contact through the monitored
 mail transport, without ever blocking the approval itself. Milestone 16 adds
 accountability: order transitions, stock movements, invitations, and member
 changes are recorded in a tenant-scoped audit log that administrators browse
-from the workspace overview. Possible next steps: org-level settings for the
-order email sender identity, or product cost and valuation reporting.
+from the workspace overview. Milestone 17 prices the warehouse: an inventory
+valuation report derives weighted average costs from receipt history and shows
+per-product and total on-hand value, excluding stock whose cost is unknown.
+Possible next steps: org-level settings for the order email sender identity,
+or supplier performance metrics from receipt timing.
 
 ## Commit Workflow
 
