@@ -9,10 +9,22 @@ import {
   stockMovementTypeSchema,
   stockValuationSchema,
   transferInputSchema,
+  trendListSchema,
 } from '../src/lib/contracts';
 
 const uuid = '8ed13b94-fd8b-4079-848e-f22edaa8ce05';
 const otherUuid = '2b8fa8f2-15a5-4a37-a1a5-0e6ad1c2b6c1';
+
+test('validates weekly trend reports', () => {
+  const week = { weekStart: '2026-09-28', ordersCreated: 3, unitsReceived: 10, movements: 5 };
+  assert.equal(trendListSchema.safeParse({ weeks: [week] }).success, true);
+  assert.equal(trendListSchema.safeParse({ weeks: [] }).success, true);
+  assert.equal(
+    trendListSchema.safeParse({ weeks: [{ ...week, weekStart: '28-09-2026' }] }).success,
+    false,
+  );
+  assert.equal(trendListSchema.safeParse({ weeks: [{ ...week, movements: -1 }] }).success, false);
+});
 
 test('validates valuation reports with nullable costs', () => {
   const item = {

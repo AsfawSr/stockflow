@@ -76,6 +76,16 @@ export const auditListSchema = z.object({
   page: z.number().int().positive(),
   pageSize: z.number().int().positive(),
 });
+export const trendListSchema = z.object({
+  weeks: z.array(
+    z.object({
+      weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      ordersCreated: z.number().int().nonnegative(),
+      unitsReceived: z.number().int().nonnegative(),
+      movements: z.number().int().nonnegative(),
+    }),
+  ),
+});
 export const memberRolesInputSchema = z.object({
   roles: z.array(roleSchema).min(1, 'Choose at least one role.'),
 });

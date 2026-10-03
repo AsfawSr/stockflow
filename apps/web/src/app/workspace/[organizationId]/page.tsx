@@ -21,6 +21,7 @@ import {
   roleLabels,
   stockLevelListSchema,
   stockMovementListSchema,
+  trendListSchema,
 } from '@/lib/contracts';
 import { authenticatedRequest, requireOrganization, requireUser } from '@/lib/session';
 
@@ -42,7 +43,7 @@ export default async function WorkspacePage({
   const admin = organization.roles.includes('ADMIN');
   const rawQuery = querySchema.safeParse(await searchParams);
   const query = rawQuery.success ? rawQuery.data : querySchema.parse({});
-  const [members, invitations, balances, lowBalances, submittedOrders, recentMovements] =
+  const [members, invitations, balances, lowBalances, submittedOrders, recentMovements, trends] =
     await Promise.all([
       admin
         ? authenticatedRequest(
@@ -72,6 +73,7 @@ export default async function WorkspacePage({
         `/organizations/${organization.id}/stock/movements?pageSize=5`,
         stockMovementListSchema,
       ),
+      authenticatedRequest(`/organizations/${organization.id}/trends`, trendListSchema),
     ]);
   const pulse = [
     {
@@ -113,6 +115,10 @@ export default async function WorkspacePage({
       timeStyle: 'short',
       timeZone: 'UTC',
     }).format(new Date(date));
+  const formatWeek = (date: string) =>
+    new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(
+      new Date(`${date}T00:00:00Z`),
+    );
   return (
     <AppShell user={user} organization={organization} section="Overview">
       <div className="page-heading workspace-heading">
@@ -199,6 +205,33 @@ export default async function WorkspacePage({
           </ul>
         ) : (
           <p className="muted">Stock movements will appear here.</p>
+        )}
+        <h3 className="subsection-heading">Weekly activity</h3>
+        {trends.ok ? (
+          <div className="service-table-wrapper">
+            <table className="service-table trend-table">
+              <thead>
+                <tr>
+                  <th scope="col">WEEK OF</th>
+                  <th scope="col">NEW ORDERS</th>
+                  <th scope="col">UNITS RECEIVED</th>
+                  <th scope="col">MOVEMENTS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...trends.data.weeks].reverse().map((week) => (
+                  <tr key={week.weekStart}>
+                    <td>{formatWeek(week.weekStart)}</td>
+                    <td>{week.ordersCreated}</td>
+                    <td>{week.unitsReceived}</td>
+                    <td>{week.movements}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="muted">Trends are unavailable right now.</p>
         )}
       </section>
       {admin && (

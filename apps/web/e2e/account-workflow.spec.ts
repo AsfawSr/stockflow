@@ -646,6 +646,13 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await expect(page.locator('.activity-list li').first()).toContainText('Adjustment');
   await expect(page.locator('.activity-list li').first()).toContainText('at Main Warehouse');
 
+  // The weekly trend table counts this week's orders, received units, and movements.
+  const currentWeekRow = page.locator('.trend-table tbody tr').first();
+  await expect(currentWeekRow.getByRole('cell', { name: '3', exact: true })).toBeVisible();
+  await expect(currentWeekRow.getByRole('cell', { name: '10', exact: true })).toBeVisible();
+  await expect(currentWeekRow.getByRole('cell', { name: '5', exact: true })).toBeVisible();
+  await expect(page.locator('.trend-table tbody tr')).toHaveCount(8);
+
   // Administrators can trace every workspace action in the audit log.
   await page.getByRole('link', { name: 'Audit log', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Audit log', exact: true })).toBeVisible();
