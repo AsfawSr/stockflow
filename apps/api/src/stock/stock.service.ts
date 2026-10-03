@@ -70,6 +70,59 @@ export class StockService {
     ]);
   }
 
+  // Weighted average cost over every received delivery; stock without receipts has no value.
+  async valuation(organizationId: string) {
+    const rows = (await this.prisma.$queryRaw`
+      WITH on_hand AS (
+        SELECT product_id, SUM(quantity)::int AS total
+        FROM stock_levels
+        WHERE organization_id = ${organizationId}::uuid
+        GROUP BY product_id
+        HAVING SUM(quantity) > 0
+      ),
+      received AS (
+        SELECT l.product_id,
+          SUM(r.quantity * l.unit_price) AS total_cost,
+          SUM(r.quantity)::int AS total_quantity
+        FROM goods_receipt_lines r
+        JOIN purchase_order_lines l ON l.id = r.purchase_order_line_id
+        JOIN goods_receipts g ON g.id = r.goods_receipt_id
+        WHERE g.organization_id = ${organizationId}::uuid
+        GROUP BY l.product_id
+      )
+      SELECT p.id, p.sku, p.name, p.unit, h.total AS on_hand, c.total_cost, c.total_quantity
+      FROM products p
+      JOIN on_hand h ON h.product_id = p.id
+      LEFT JOIN received c ON c.product_id = p.id
+      WHERE p.organization_id = ${organizationId}::uuid
+      ORDER BY p.name ASC, p.id ASC
+    `) as {
+      id: string;
+      sku: string;
+      name: string;
+      unit: string;
+      on_hand: number;
+      total_cost: string | null;
+      total_quantity: number | null;
+    }[];
+    let totalValue = new Prisma.Decimal(0);
+    const items = rows.map((row) => {
+      const average =
+        row.total_cost !== null && row.total_quantity
+          ? new Prisma.Decimal(row.total_cost).div(row.total_quantity)
+          : null;
+      const value = average ? average.mul(row.on_hand).toDecimalPlaces(2) : null;
+      if (value) totalValue = totalValue.add(value);
+      return {
+        product: { id: row.id, sku: row.sku, name: row.name, unit: row.unit },
+        onHand: row.on_hand,
+        averageCost: average ? average.toFixed(2) : null,
+        value: value ? value.toFixed(2) : null,
+      };
+    });
+    return { items, totalValue: totalValue.toFixed(2) };
+  }
+
   async levels(organizationId: string, query: StockLevelsQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;

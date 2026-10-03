@@ -63,6 +63,12 @@ export class StockController {
     return this.stock.movementsCsv(organizationId, query);
   }
 
+  @Get('valuation')
+  @Header('Cache-Control', 'no-store')
+  valuation(@Param('organizationId') organizationId: string) {
+    return this.stock.valuation(organizationId);
+  }
+
   @Post('transfers')
   @Roles('ADMIN', 'WAREHOUSE')
   @HttpCode(201)

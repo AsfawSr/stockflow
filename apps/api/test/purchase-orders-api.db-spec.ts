@@ -1098,4 +1098,124 @@ describe('Purchase order workflow against PostgreSQL', () => {
       expect(outbox.length).toBe(rejectBefore);
     });
   }, 60000);
+
+  it('values on-hand stock from receipt history with weighted average cost', async () => {
+    await withApplication(async (app) => {
+      const owner = await registerVerified(app);
+      const seed = await seedOrganization(app, owner.auth);
+      const base = `/api/organizations/${seed.organizationId}/purchase-orders`;
+      const valuationUrl = `/api/organizations/${seed.organizationId}/stock/valuation`;
+      const getValuation = (auth = owner.auth) =>
+        request(app.getHttpServer()).get(valuationUrl).set('Authorization', auth);
+      const receiveOrder = async (
+        lines: { productId: string; quantity: number; unitPrice: string }[],
+        received: Record<string, number>,
+      ) => {
+        const draft = await request(app.getHttpServer())
+          .post(base)
+          .set('Authorization', owner.auth)
+          .send({ supplierId: seed.supplierId, locationId: seed.locationId })
+          .expect(201);
+        const orderId = draft.body.id as string;
+        for (const line of lines) {
+          await request(app.getHttpServer())
+            .post(`${base}/${orderId}/lines`)
+            .set('Authorization', owner.auth)
+            .send(line)
+            .expect(201);
+        }
+        await request(app.getHttpServer())
+          .post(`${base}/${orderId}/submit`)
+          .set('Authorization', owner.auth)
+          .expect(200);
+        await request(app.getHttpServer())
+          .post(`${base}/${orderId}/approve`)
+          .set('Authorization', owner.auth)
+          .send({})
+          .expect(200);
+        const detail = await request(app.getHttpServer())
+          .get(`${base}/${orderId}`)
+          .set('Authorization', owner.auth)
+          .expect(200);
+        await request(app.getHttpServer())
+          .post(`${base}/${orderId}/receipts`)
+          .set('Authorization', owner.auth)
+          .send({
+            lines: detail.body.lines.map((line: { id: string; product: { id: string } }) => ({
+              purchaseOrderLineId: line.id,
+              quantity: received[line.product.id],
+            })),
+          })
+          .expect(201);
+      };
+      const adjust = (productId: string, quantity: number) =>
+        request(app.getHttpServer())
+          .post(`/api/organizations/${seed.organizationId}/stock/adjustments`)
+          .set('Authorization', owner.auth)
+          .send({ productId, locationId: seed.locationId, quantity, reason: 'Count correction' })
+          .expect(201);
+
+      const empty = await getValuation().expect(200);
+      expect(empty.body).toEqual({ items: [], totalValue: '0.00' });
+
+      // 6 chargers land at 4.00 and 4 more at 7.00; one is written off.
+      await receiveOrder(
+        [
+          { productId: seed.chargerId, quantity: 10, unitPrice: '4.00' },
+          { productId: seed.cableId, quantity: 5, unitPrice: '2.50' },
+        ],
+        { [seed.chargerId]: 6, [seed.cableId]: 5 },
+      );
+      await adjust(seed.chargerId, -1);
+      await receiveOrder([{ productId: seed.chargerId, quantity: 4, unitPrice: '7.00' }], {
+        [seed.chargerId]: 4,
+      });
+
+      const valued = await getValuation().expect(200);
+      expect(valued.body.items).toEqual([
+        {
+          product: { id: seed.cableId, sku: 'CABLE-2M', name: 'HDMI Cable', unit: 'piece' },
+          onHand: 5,
+          averageCost: '2.50',
+          value: '12.50',
+        },
+        {
+          product: { id: seed.chargerId, sku: 'CHARGER-65', name: 'USB-C Charger', unit: 'piece' },
+          onHand: 9,
+          averageCost: '5.20',
+          value: '46.80',
+        },
+      ]);
+      expect(valued.body.totalValue).toBe('59.30');
+
+      // Stock that never arrived through a receipt has no known cost.
+      const freebie = await request(app.getHttpServer())
+        .post(`/api/organizations/${seed.organizationId}/products`)
+        .set('Authorization', owner.auth)
+        .send({ sku: 'FREEBIE-1', name: 'Promo Sticker', unit: 'piece' })
+        .expect(201);
+      await adjust(freebie.body.id, 3);
+      await adjust(seed.cableId, -5);
+      const mixed = await getValuation().expect(200);
+      expect(mixed.body.items).toEqual([
+        {
+          product: { id: freebie.body.id, sku: 'FREEBIE-1', name: 'Promo Sticker', unit: 'piece' },
+          onHand: 3,
+          averageCost: null,
+          value: null,
+        },
+        {
+          product: { id: seed.chargerId, sku: 'CHARGER-65', name: 'USB-C Charger', unit: 'piece' },
+          onHand: 9,
+          averageCost: '5.20',
+          value: '46.80',
+        },
+      ]);
+      expect(mixed.body.totalValue).toBe('46.80');
+
+      await request(app.getHttpServer()).get(valuationUrl).expect(401);
+      const outsider = await registerVerified(app);
+      await getValuation(outsider.auth).expect(404);
+    });
+  }, 60000);
 });
