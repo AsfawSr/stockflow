@@ -10,11 +10,18 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { AuthenticatedRequest } from '../auth/auth.guard';
 import { VerifiedEmailGuard } from '../auth/auth.guard';
 import { OrganizationAccessGuard, Roles } from '../organizations/organization-access.guard';
-import { CreateProductDto, ListProductsDto, UpdateProductDto } from './products.dto';
+import {
+  CreateProductDto,
+  ImportProductsDto,
+  ListProductsDto,
+  UpdateProductDto,
+} from './products.dto';
 import { ProductsService } from './products.service';
 
 @Controller('organizations/:organizationId/products')
@@ -42,6 +49,18 @@ export class ProductsController {
   @Header('Cache-Control', 'no-store')
   create(@Param('organizationId') organizationId: string, @Body() input: CreateProductDto) {
     return this.products.create(organizationId, input);
+  }
+
+  @Post('import')
+  @Roles('ADMIN', 'MANAGER')
+  @HttpCode(201)
+  @Header('Cache-Control', 'no-store')
+  importCsv(
+    @Req() request: AuthenticatedRequest,
+    @Param('organizationId') organizationId: string,
+    @Body() input: ImportProductsDto,
+  ) {
+    return this.products.importCsv(organizationId, request.principal.user.id, input.csv);
   }
 
   @Patch(':productId')

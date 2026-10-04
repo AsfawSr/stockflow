@@ -44,6 +44,7 @@ describe('Product API against PostgreSQL', () => {
                 organization: database.organization,
                 membership: database.membership,
                 accountToken: database.accountToken,
+                auditEvent: database.auditEvent,
                 product: database.product,
                 $transaction: (
                   callback: (transaction: Prisma.TransactionClient) => Promise<unknown>,
@@ -375,6 +376,106 @@ describe('Product API against PostgreSQL', () => {
         .post(`${base}/${productId}/restore`)
         .set('Authorization', member.auth)
         .expect(200);
+    });
+  });
+
+  it('imports a product catalog from CSV all-or-nothing', async () => {
+    await withApplication(async (app, database) => {
+      const owner = await registerVerified(app);
+      const organizationId = await createOrganization(app, owner.auth, 'Import Organization');
+      const base = `/api/organizations/${organizationId}/products`;
+      const importCsv = (csv: string, auth = owner.auth) =>
+        request(app.getHttpServer())
+          .post(`${base}/import`)
+          .set('Authorization', auth)
+          .send({ csv });
+
+      const imported = await importCsv(
+        [
+          'sku,name,unit,description,reorder_point',
+          'usb-c-65w,USB-C Charger 65W,piece,"Fast charger, 65W",10',
+          'HDMI-2M,HDMI Cable 2m,piece,,',
+          'SSD-1TB,NVMe SSD 1TB,piece,"With ""heatsink""",5',
+        ].join('\r\n'),
+      ).expect(201);
+      expect(imported.body).toEqual({ created: 3 });
+      const list = await request(app.getHttpServer())
+        .get(`${base}?pageSize=10`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      expect(list.body.total).toBe(3);
+      const charger = list.body.items.find(
+        (product: { sku: string }) => product.sku === 'USB-C-65W',
+      );
+      expect(charger).toMatchObject({
+        name: 'USB-C Charger 65W',
+        unit: 'piece',
+        description: 'Fast charger, 65W',
+        reorderPoint: 10,
+      });
+      const cable = list.body.items.find((product: { sku: string }) => product.sku === 'HDMI-2M');
+      expect(cable).toMatchObject({ description: null, reorderPoint: null });
+      const events = await database.auditEvent.findMany({
+        where: { organizationId, action: 'product.imported' },
+        select: { summary: true },
+      });
+      expect(events).toEqual([{ summary: 'Imported 3 products from CSV' }]);
+
+      // Every problem is reported with its line and nothing is written.
+      const invalid = await importCsv(
+        [
+          'sku,name,unit,reorder_point',
+          'VALID-01,Valid Product,piece,4',
+          'bad sku!,No Good,piece,',
+          'VALID-01,Duplicate In File,piece,',
+          'HDMI-2M,Already Exists,piece,',
+          'VALID-02,Bad Reorder,piece,ten',
+        ].join('\n'),
+      ).expect(400);
+      expect(invalid.body.errors).toEqual([
+        { line: 3, message: 'SKU must use letters, digits, dots, underscores, or hyphens.' },
+        { line: 4, message: 'Duplicate SKU "VALID-01" in the file.' },
+        { line: 6, message: 'Reorder point must be a whole number up to 1000000.' },
+        { line: 5, message: 'SKU "HDMI-2M" already exists.' },
+      ]);
+      const after = await request(app.getHttpServer())
+        .get(`${base}?search=VALID`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      expect(after.body.total).toBe(0);
+
+      // Structural problems are caught at the header line.
+      const missing = await importCsv('sku,name\nA-1,Name').expect(400);
+      expect(missing.body.errors).toEqual([
+        { line: 1, message: 'Missing required column "unit".' },
+      ]);
+      const unknown = await importCsv('sku,name,unit,price\nA-1,Name,piece,4').expect(400);
+      expect(unknown.body.errors).toEqual([{ line: 1, message: 'Unknown column "price".' }]);
+      const headerOnly = await importCsv('sku,name,unit').expect(400);
+      expect(headerOnly.body.errors).toEqual([
+        { line: 1, message: 'Add at least one product row.' },
+      ]);
+      const unterminated = await importCsv('sku,name,unit\n"A-1,Name,piece').expect(400);
+      expect(unterminated.body.errors).toEqual([
+        { line: 1, message: 'Unterminated quoted field.' },
+      ]);
+
+      // Catalog roles gate the import like any other write.
+      const member = await registerVerified(app);
+      const memberAccount = await database.user.findUniqueOrThrow({
+        where: { email: member.email },
+        select: { id: true },
+      });
+      await database.membership.create({
+        data: { organizationId, userId: memberAccount.id, roles: ['WAREHOUSE'] },
+      });
+      await importCsv('sku,name,unit\nDENIED-01,Denied,piece', member.auth).expect(403);
+      const outsider = await registerVerified(app);
+      await importCsv('sku,name,unit\nDENIED-01,Denied,piece', outsider.auth).expect(404);
+      await request(app.getHttpServer())
+        .post(`${base}/import`)
+        .send({ csv: 'sku,name,unit\nDENIED-01,Denied,piece' })
+        .expect(401);
     });
   });
 });

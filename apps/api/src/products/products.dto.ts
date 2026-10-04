@@ -54,6 +54,13 @@ export class CreateProductDto {
   reorderPoint?: number | null;
 }
 
+export class ImportProductsDto {
+  @IsString()
+  @Matches(/\S/, { message: 'Paste or upload a CSV file.' })
+  @MaxLength(100000, { message: 'The CSV is too large; import at most 100 KB at a time.' })
+  csv!: string;
+}
+
 export class UpdateProductDto {
   @IsOptional()
   @Transform(canonicalSku)
