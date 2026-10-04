@@ -192,7 +192,9 @@ export function RenameOrganizationForm({ organization }: { organization: Organiz
           defaultValue={organization.replyToEmail ?? ''}
           aria-invalid={Boolean(state.fieldErrors?.replyToEmail)}
         />
-        <p className="field-hint">Supplier replies to order emails go to this address.</p>
+        <p className="field-hint">
+          Supplier replies to order emails and daily low-stock digests go to this address.
+        </p>
         <FieldError name="replyToEmail" state={state} />
       </div>
       <SubmitButton pendingText="Saving...">
