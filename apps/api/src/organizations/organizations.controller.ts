@@ -16,7 +16,7 @@ import {
 import type { AuthenticatedRequest } from '../auth/auth.guard';
 import { VerifiedEmailGuard } from '../auth/auth.guard';
 import { PageQueryDto } from '../common/list-query.dto';
-import { OrganizationAccessGuard, Roles } from './organization-access.guard';
+import { OrganizationAccessGuard, AllowArchived, Roles } from './organization-access.guard';
 import {
   CreateOrganizationDto,
   UpdateMemberRolesDto,
@@ -79,6 +79,7 @@ export class OrganizationsController {
   @Post(':organizationId/restore')
   @UseGuards(OrganizationAccessGuard)
   @Roles('ADMIN')
+  @AllowArchived()
   @HttpCode(200)
   @Header('Cache-Control', 'no-store')
   restore(@Req() request: AuthenticatedRequest, @Param('organizationId') organizationId: string) {

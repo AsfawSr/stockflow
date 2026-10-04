@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   CanActivate,
+  ConflictException,
   ExecutionContext,
   ForbiddenException,
   Injectable,
@@ -16,6 +17,9 @@ import { PrismaService } from '../prisma/prisma.service';
 
 export const Roles = (...roles: OrganizationRole[]) =>
   SetMetadata('stockflow.organizationRoles', roles);
+
+// Marks routes that must stay usable while the organization is archived.
+export const AllowArchived = () => SetMetadata('stockflow.allowArchived', true);
 
 @Injectable()
 export class OrganizationAccessGuard implements CanActivate {
@@ -33,7 +37,7 @@ export class OrganizationAccessGuard implements CanActivate {
     }
     const membership = await this.prisma.membership.findUnique({
       where: { organizationId_userId: { organizationId, userId: request.principal.user.id } },
-      select: { roles: true },
+      select: { roles: true, organization: { select: { archivedAt: true } } },
     });
     if (!membership) throw new NotFoundException('Organization not found.');
     const requiredRoles = this.reflector.getAllAndOverride<OrganizationRole[]>(
@@ -42,6 +46,13 @@ export class OrganizationAccessGuard implements CanActivate {
     );
     if (requiredRoles?.length && !requiredRoles.some((role) => membership.roles.includes(role))) {
       throw new ForbiddenException('Insufficient organization permissions.');
+    }
+    const allowArchived = this.reflector.getAllAndOverride<boolean>('stockflow.allowArchived', [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (membership.organization.archivedAt && request.method !== 'GET' && !allowArchived) {
+      throw new ConflictException('This organization is archived and read-only.');
     }
     return true;
   }

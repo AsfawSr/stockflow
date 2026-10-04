@@ -128,11 +128,20 @@ export class InvitationsService {
     const joined = await this.prisma.$transaction(async (tx) => {
       const candidate = await tx.invitation.findUnique({
         where: { tokenHash },
-        select: { id: true, organizationId: true, email: true, roles: true, expiresAt: true },
+        select: {
+          id: true,
+          organizationId: true,
+          email: true,
+          roles: true,
+          expiresAt: true,
+          organization: { select: { archivedAt: true } },
+        },
       });
       if (!candidate || candidate.expiresAt <= new Date()) throw invalid();
       if (candidate.email !== user.email)
         throw new ForbiddenException('This invitation was issued for a different email address.');
+      if (candidate.organization.archivedAt)
+        throw new ConflictException('This organization is archived and not accepting members.');
       const claimed = await tx.invitation.deleteMany({
         where: { id: candidate.id, expiresAt: { gt: new Date() } },
       });

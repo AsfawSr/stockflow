@@ -215,4 +215,82 @@ describe('Organization archiving against PostgreSQL', () => {
       ]);
     });
   }, 60000);
+
+  it('keeps archived organizations readable but rejects every mutation', async () => {
+    await withApplication(async (app, database) => {
+      const owner = await registerVerified(app);
+      const organization = await request(app.getHttpServer())
+        .post('/api/organizations')
+        .set('Authorization', owner.auth)
+        .send({ name: `ReadOnly ${randomUUID().slice(0, 8)}`, currency: 'USD' })
+        .expect(201);
+      const organizationId = organization.body.id as string;
+      const api = `/api/organizations/${organizationId}`;
+      const authed = (method: 'get' | 'post' | 'patch', path: string) =>
+        request(app.getHttpServer())[method](`${api}${path}`).set('Authorization', owner.auth);
+
+      const product = await authed('post', '/products')
+        .send({ sku: 'FROZEN-1', name: 'Frozen Widget', unit: 'piece' })
+        .expect(201);
+      await authed('post', '/suppliers').send({ name: 'Frozen Supplier' }).expect(201);
+      await authed('post', '/locations').send({ name: 'Frozen Warehouse' }).expect(201);
+      const invitee = await registerVerified(app, 'Frozen Invitee');
+      await authed('post', '/invitations')
+        .send({ email: invitee.email, roles: ['WAREHOUSE'] })
+        .expect(201);
+      const inviteMail = outbox.findLast((mail) => mail.to === invitee.email)!;
+      const inviteToken = new URLSearchParams(new URL(inviteMail.actionUrl!).hash.slice(1)).get(
+        'token',
+      )!;
+      await authed('post', '/archive').expect(200);
+
+      // Reads across the workspace still answer.
+      await authed('get', '/products').expect(200);
+      await authed('get', '/suppliers').expect(200);
+      await authed('get', '/stock/levels').expect(200);
+      await authed('get', '/purchase-orders').expect(200);
+      await authed('get', '/audit').expect(200);
+      await authed('get', '/trends').expect(200);
+
+      // Every mutating route answers 409, including pre-archive invitation links.
+      await authed('post', '/products')
+        .send({ sku: 'FROZEN-2', name: 'Another Widget', unit: 'piece' })
+        .expect(409);
+      await authed('patch', `/products/${product.body.id}`).send({ name: 'Renamed' }).expect(409);
+      await authed('patch', '').send({ name: 'Renamed Org' }).expect(409);
+      await authed('post', '/suppliers').send({ name: 'Blocked Supplier' }).expect(409);
+      await authed('post', '/purchase-orders')
+        .send({ supplierId: randomUUID(), locationId: randomUUID() })
+        .expect(409);
+      await authed('post', '/stock/adjustments')
+        .send({
+          productId: product.body.id,
+          locationId: randomUUID(),
+          quantity: 1,
+          reason: 'Blocked',
+        })
+        .expect(409);
+      await authed('post', '/invitations')
+        .send({ email: `${randomUUID()}@example.test`, roles: ['MANAGER'] })
+        .expect(409);
+      const blockedAccept = await request(app.getHttpServer())
+        .post('/api/invitations/accept')
+        .set('Authorization', invitee.auth)
+        .send({ token: inviteToken })
+        .expect(409);
+      expect(blockedAccept.body.message).toContain('archived');
+
+      // Restoring reopens the workspace for writes.
+      await authed('post', '/restore').expect(200);
+      await authed('post', '/products')
+        .send({ sku: 'FROZEN-2', name: 'Another Widget', unit: 'piece' })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post('/api/invitations/accept')
+        .set('Authorization', invitee.auth)
+        .send({ token: inviteToken })
+        .expect(200);
+      expect(database).toBeDefined();
+    });
+  }, 60000);
 });
