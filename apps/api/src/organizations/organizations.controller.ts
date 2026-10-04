@@ -76,6 +76,15 @@ export class OrganizationsController {
     return this.organizations.archive(request.principal.user.id, organizationId);
   }
 
+  @Post(':organizationId/restore')
+  @UseGuards(OrganizationAccessGuard)
+  @Roles('ADMIN')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  restore(@Req() request: AuthenticatedRequest, @Param('organizationId') organizationId: string) {
+    return this.organizations.restore(request.principal.user.id, organizationId);
+  }
+
   @Get(':organizationId/members')
   @UseGuards(OrganizationAccessGuard)
   @Roles('ADMIN')

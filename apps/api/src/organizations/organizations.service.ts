@@ -136,6 +136,23 @@ export class OrganizationsService {
     return this.get(userId, organizationId);
   }
 
+  async restore(userId: string, organizationId: string) {
+    const updated = await this.prisma.organization.updateMany({
+      where: { id: organizationId, archivedAt: { not: null } },
+      data: { archivedAt: null },
+    });
+    if (updated.count !== 1) throw new ConflictException('This organization is not archived.');
+    await this.audit.record({
+      organizationId,
+      actorId: userId,
+      action: 'organization.restored',
+      entityType: 'organization',
+      entityId: organizationId,
+      summary: 'Restored the organization',
+    });
+    return this.get(userId, organizationId);
+  }
+
   async members(userId: string, organizationId: string, query: PageQueryDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;

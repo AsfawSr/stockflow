@@ -166,4 +166,53 @@ describe('Organization archiving against PostgreSQL', () => {
       });
     });
   }, 60000);
+
+  it('restores an archived organization and refuses to restore an active one', async () => {
+    await withApplication(async (app, database) => {
+      const owner = await registerVerified(app);
+      const organization = await request(app.getHttpServer())
+        .post('/api/organizations')
+        .set('Authorization', owner.auth)
+        .send({ name: `Restore ${randomUUID().slice(0, 8)}`, currency: 'USD' })
+        .expect(201);
+      const organizationId = organization.body.id as string;
+      const restoreUrl = `/api/organizations/${organizationId}/restore`;
+
+      await request(app.getHttpServer())
+        .post(restoreUrl)
+        .set('Authorization', owner.auth)
+        .expect(409);
+      await request(app.getHttpServer())
+        .post(`/api/organizations/${organizationId}/archive`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+
+      const manager = await addMember(database, app, organizationId, ['MANAGER']);
+      await request(app.getHttpServer())
+        .post(restoreUrl)
+        .set('Authorization', manager.auth)
+        .expect(403);
+      const outsider = await registerVerified(app);
+      await request(app.getHttpServer())
+        .post(restoreUrl)
+        .set('Authorization', outsider.auth)
+        .expect(404);
+      await request(app.getHttpServer()).post(restoreUrl).expect(401);
+
+      const restored = await request(app.getHttpServer())
+        .post(restoreUrl)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      expect(restored.body.archivedAt).toBeNull();
+
+      const audit = await request(app.getHttpServer())
+        .get(`/api/organizations/${organizationId}/audit`)
+        .set('Authorization', owner.auth)
+        .expect(200);
+      expect(audit.body.items.map((item: { action: string }) => item.action).slice(0, 2)).toEqual([
+        'organization.restored',
+        'organization.archived',
+      ]);
+    });
+  }, 60000);
 });
