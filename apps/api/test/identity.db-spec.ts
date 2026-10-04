@@ -150,6 +150,24 @@ describe('Identity database constraints', () => {
       client.query('UPDATE organizations SET name = $1 WHERE id = $2', [' \t ', organizationId]),
     ).rejects.toMatchObject({ code: '23514', constraint: 'organizations_name_nonblank' });
   });
+  it('archives and restores an organization through the timestamp column', async () => {
+    const archived = new Date('2026-10-04T10:00:00.000Z');
+    await expect(
+      client.query('UPDATE organizations SET archived_at = $1 WHERE id = $2', [
+        archived,
+        organizationId,
+      ]),
+    ).resolves.toMatchObject({ rowCount: 1 });
+    const row = await client.query<{ archived_at: Date }>(
+      'SELECT archived_at FROM organizations WHERE id = $1',
+      [organizationId],
+    );
+    expect(row.rows[0].archived_at.toISOString()).toBe(archived.toISOString());
+    await expect(
+      client.query('UPDATE organizations SET archived_at = NULL WHERE id = $1', [organizationId]),
+    ).resolves.toMatchObject({ rowCount: 1 });
+  });
+
   it('requires a normalized organization reply-to email when present', async () => {
     await expect(
       client.query('UPDATE organizations SET reply_to_email = $1 WHERE id = $2', [

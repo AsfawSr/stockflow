@@ -52,6 +52,7 @@ model Organization {
   currency    String       @db.Char(3)
   replyToEmail String?     @map("reply_to_email") @db.VarChar(254)
   lastDigestAt DateTime?   @map("last_digest_at") @db.Timestamptz(3)
+  archivedAt  DateTime?    @map("archived_at") @db.Timestamptz(3)
   createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
   memberships Membership[]
