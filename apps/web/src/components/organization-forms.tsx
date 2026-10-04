@@ -1,10 +1,21 @@
 'use client';
 
 import { useActionState, useRef, useState } from 'react';
-import { ArrowRight, Building2, Plus, Save, Search, X } from 'lucide-react';
 import {
+  Archive,
+  ArchiveRestore,
+  ArrowRight,
+  Building2,
+  Plus,
+  Save,
+  Search,
+  X,
+} from 'lucide-react';
+import {
+  archiveOrganizationAction,
   createOrganizationAction,
   renameOrganizationAction,
+  restoreOrganizationAction,
   selectOrganizationAction,
 } from '@/app/actions';
 import { roleLabels, type FormState, type Organization } from '@/lib/contracts';
@@ -202,5 +213,69 @@ export function RenameOrganizationForm({ organization }: { organization: Organiz
         Save profile
       </SubmitButton>
     </form>
+  );
+}
+
+export function ArchiveOrganizationControls({ organization }: { organization: Organization }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [archiveState, archiveAction, archivePending] = useActionState(
+    archiveOrganizationAction,
+    {} as FormState,
+  );
+  const [restoreState, restoreAction] = useActionState(restoreOrganizationAction, {} as FormState);
+  if (organization.archivedAt) {
+    return (
+      <form action={restoreAction} className="row-action-form">
+        <input type="hidden" name="organizationId" value={organization.id} />
+        <FormFeedback state={restoreState} />
+        <SubmitButton pendingText="Restoring...">
+          <ArchiveRestore size={16} aria-hidden="true" />
+          Restore organization
+        </SubmitButton>
+      </form>
+    );
+  }
+  return (
+    <>
+      <button className="secondary-button" onClick={() => dialog.current?.showModal()}>
+        <Archive size={16} aria-hidden="true" />
+        Archive organization
+      </button>
+      <dialog
+        className="organization-dialog"
+        ref={dialog}
+        aria-label={`Archive ${organization.name}`}
+        onCancel={(event) => {
+          if (archivePending) event.preventDefault();
+        }}
+      >
+        <div className="dialog-heading">
+          <h2>Archive {organization.name}?</h2>
+          <button
+            className="icon-button"
+            aria-label="Close dialog"
+            title="Close dialog"
+            disabled={archivePending}
+            onClick={() => dialog.current?.close()}
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <p className="muted">
+          Members keep read access to every screen and export, but all changes are blocked until an
+          administrator restores the organization. No data is deleted.
+        </p>
+        <form action={archiveAction} className="stacked-form">
+          <input type="hidden" name="organizationId" value={organization.id} />
+          <FormFeedback state={archiveState} />
+          <div className="dialog-actions">
+            <SubmitButton pendingText="Archiving...">
+              <Archive size={16} aria-hidden="true" />
+              Archive organization
+            </SubmitButton>
+          </div>
+        </form>
+      </dialog>
+    </>
   );
 }

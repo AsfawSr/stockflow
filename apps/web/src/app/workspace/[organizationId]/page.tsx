@@ -12,7 +12,10 @@ import { z } from 'zod';
 import { AppShell } from '@/components/app-shell';
 import { InviteMemberButton, RevokeInvitationButton } from '@/components/invitation-forms';
 import { MemberRolesButton, RemoveMemberButton } from '@/components/member-forms';
-import { RenameOrganizationForm } from '@/components/organization-forms';
+import {
+  ArchiveOrganizationControls,
+  RenameOrganizationForm,
+} from '@/components/organization-forms';
 import {
   invitationListSchema,
   memberListSchema,
@@ -138,6 +141,12 @@ export default async function WorkspacePage({
           Switch organization
         </Link>
       </div>
+      {organization.archivedAt && (
+        <p className="form-notice" role="status">
+          This organization is archived and read-only. Browsing and exports keep working; an
+          administrator can restore it below.
+        </p>
+      )}
       <section className="workspace-section" aria-labelledby="profile-heading">
         <div className="section-heading">
           <h2 id="profile-heading">Organization profile</h2>
@@ -164,8 +173,15 @@ export default async function WorkspacePage({
               <dd>{user.email}</dd>
             </div>
           </dl>
-          {admin && <RenameOrganizationForm organization={organization} />}
+          {admin && !organization.archivedAt && (
+            <RenameOrganizationForm organization={organization} />
+          )}
         </div>
+        {admin && (
+          <div className="section-footer">
+            <ArchiveOrganizationControls organization={organization} />
+          </div>
+        )}
       </section>
       <section className="workspace-section" aria-labelledby="pulse-heading">
         <div className="section-heading">

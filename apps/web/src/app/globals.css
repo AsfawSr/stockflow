@@ -1240,6 +1240,14 @@ dd {
   gap: 40px;
   padding-top: 12px;
 }
+.section-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
 .organization-details {
   margin: 0;
   max-width: none;
