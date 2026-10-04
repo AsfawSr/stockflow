@@ -441,6 +441,16 @@ rate-limit windows. It never touches
 unexpired or consumed-but-live records, logs what it removed, survives database
 outages by retrying on the next interval, and is disabled under `NODE_ENV=test`
 so test fixtures stay deterministic. `CLEANUP_INTERVAL_MS` overrides the cadence.
+
+A second sweep on the same schedule (`DIGEST_INTERVAL_MS` to override) sends each
+organization a daily low-stock digest: when an organization has a reply-to
+address and at least one active product at or below its reorder point, it
+receives one plain-text email listing those products with on-hand quantities and
+a link to the filtered stock screen. The twenty-hour send window is claimed with
+a guarded update before mailing, so parallel API instances never double-send;
+organizations with nothing low are left unclaimed and healthy inboxes stay
+quiet. Tests cover the digest contents, the window claim, re-sending after the
+window ages out, and the untouched quiet organization.
 Production email refuses the development file transport: outside development,
 `MAIL_TRANSPORT=smtp` with `SMTP_HOST` and `MAIL_FROM` is required, and the SMTP
 transport uses bounded connection, greeting, and socket timeouts.
@@ -843,8 +853,11 @@ a database check and attached to outgoing order mail. Milestone 22 makes the
 project easy to show: `npm run demo:seed` builds a complete demo workspace
 through the public API with orders in every state, stock history, and metrics.
 Milestone 23 speeds up onboarding: managers import whole product catalogs from
-CSV with all-or-nothing semantics and line-numbered error reports. Possible
-next steps: archiving entire organizations, or saved low-stock email digests.
+CSV with all-or-nothing semantics and line-numbered error reports. Milestone 24
+closes the reorder loop proactively: a scheduled sweep emails each organization
+a daily low-stock digest at its reply-to address, with a race-safe send window
+for multi-instance deployments. Possible next steps: archiving entire
+organizations, or webhooks for order events.
 
 ## Commit Workflow
 
