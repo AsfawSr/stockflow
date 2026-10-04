@@ -60,9 +60,9 @@ type checks, and development startup.
 
 - `Organization`: company name, one currency, UUID, and timestamps.
 - `User`: global unique email, display name, UUID, and timestamps. A user can belong
-	to several organizations. Password hashes are stored in a separate credential table.
+  to several organizations. Password hashes are stored in a separate credential table.
 - `Membership`: links one user to one organization with an explicit, non-empty set
-	of roles: `ADMIN`, `PURCHASER`, `MANAGER`, and `WAREHOUSE`. There is no default role.
+  of roles: `ADMIN`, `PURCHASER`, `MANAGER`, and `WAREHOUSE`. There is no default role.
 
 PostgreSQL rejects duplicate memberships, missing parent records, blank names,
 null or duplicate roles, and deletion of users or organizations with memberships.
@@ -123,15 +123,15 @@ verified email and current membership in that organization, and return
 `Cache-Control: no-store`. Any member may read the catalog; `ADMIN` or `MANAGER`
 roles are required to change it. Nonmembers receive 404 for the whole subtree.
 
-| Method | Path | Required access |
-| --- | --- | --- |
-| GET | `/` | Member; lists products with `search`, `status`, `page`, and `pageSize`. |
-| GET | `/:productId` | Member; returns one product in this organization. |
-| POST | `/` | `ADMIN`/`MANAGER`; creates a product from `sku`, `name`, `unit`, `description?`. |
-| POST | `/import` | `ADMIN`/`MANAGER`; imports a CSV catalog all-or-nothing. |
-| PATCH | `/:productId` | `ADMIN`/`MANAGER`; updates any of those fields, at least one required. |
-| POST | `/:productId/archive` | `ADMIN`/`MANAGER`; archives an active product. |
-| POST | `/:productId/restore` | `ADMIN`/`MANAGER`; restores an archived product. |
+| Method | Path                  | Required access                                                                  |
+| ------ | --------------------- | -------------------------------------------------------------------------------- |
+| GET    | `/`                   | Member; lists products with `search`, `status`, `page`, and `pageSize`.          |
+| GET    | `/:productId`         | Member; returns one product in this organization.                                |
+| POST   | `/`                   | `ADMIN`/`MANAGER`; creates a product from `sku`, `name`, `unit`, `description?`. |
+| POST   | `/import`             | `ADMIN`/`MANAGER`; imports a CSV catalog all-or-nothing.                         |
+| PATCH  | `/:productId`         | `ADMIN`/`MANAGER`; updates any of those fields, at least one required.           |
+| POST   | `/:productId/archive` | `ADMIN`/`MANAGER`; archives an active product.                                   |
+| POST   | `/:productId/restore` | `ADMIN`/`MANAGER`; restores an archived product.                                 |
 
 Listing defaults to active products, page 1, and 20 items per page (100 maximum);
 `status` accepts `active`, `archived`, or `all`, and `search` matches names
@@ -224,19 +224,19 @@ admins) create drafts, edit draft headers and lines, submit, and cancel; manager
 record receipts. Rejection requires a reason; approval accepts an optional note,
 and the decision records who decided and when.
 
-| Method | Path | Behavior |
-| --- | --- | --- |
-| GET | `/` | Lists orders with status filter and pagination, newest first, including totals. |
-| GET | `/suggestions` | Active products at or below their reorder point, with on-hand totals, a restock quantity, and the last confirmed supplier and price. |
-| POST | `/` | Creates a draft against an active supplier and location; numbering is serialized per organization. |
-| GET | `/:orderId` | Full detail: lines, receipts, decision, computed totals. |
-| PATCH | `/:orderId` | Draft-only header changes (supplier, location, note). |
-| POST/PATCH/DELETE | `/:orderId/lines[/:lineId]` | Draft-only line management; one line per product, positive quantity, `DECIMAL` price. |
-| POST | `/:orderId/submit` | Draft with at least one line becomes `SUBMITTED`. |
-| POST | `/:orderId/approve` `/reject` | Submitted orders only; rejection requires a note. |
-| POST | `/:orderId/cancel` | Draft/submitted orders, or approved orders with no receipts. |
-| POST | `/:orderId/revise` | Rejected orders reopen as drafts; the decision fields are cleared for a fresh verdict. |
-| POST | `/:orderId/receipts` | Approved or partially received orders; posts the delivery to the ledger. |
+| Method            | Path                          | Behavior                                                                                                                             |
+| ----------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| GET               | `/`                           | Lists orders with status filter and pagination, newest first, including totals.                                                      |
+| GET               | `/suggestions`                | Active products at or below their reorder point, with on-hand totals, a restock quantity, and the last confirmed supplier and price. |
+| POST              | `/`                           | Creates a draft against an active supplier and location; numbering is serialized per organization.                                   |
+| GET               | `/:orderId`                   | Full detail: lines, receipts, decision, computed totals.                                                                             |
+| PATCH             | `/:orderId`                   | Draft-only header changes (supplier, location, note).                                                                                |
+| POST/PATCH/DELETE | `/:orderId/lines[/:lineId]`   | Draft-only line management; one line per product, positive quantity, `DECIMAL` price.                                                |
+| POST              | `/:orderId/submit`            | Draft with at least one line becomes `SUBMITTED`.                                                                                    |
+| POST              | `/:orderId/approve` `/reject` | Submitted orders only; rejection requires a note.                                                                                    |
+| POST              | `/:orderId/cancel`            | Draft/submitted orders, or approved orders with no receipts.                                                                         |
+| POST              | `/:orderId/revise`            | Rejected orders reopen as drafts; the decision fields are cleared for a fresh verdict.                                               |
+| POST              | `/:orderId/receipts`          | Approved or partially received orders; posts the delivery to the ledger.                                                             |
 
 Receiving locks the order row, so competing receipts for the last remaining units
 resolve to exactly one success and one conflict. Each receipt line increments the
@@ -297,15 +297,15 @@ levels and movement history; warehouse members (or admins) record transfers and
 adjustments. Receipts already post to the ledger automatically, so these routes
 cover the remaining hand-entered movements.
 
-| Method | Path | Behavior |
-| --- | --- | --- |
-| GET | `/levels` | On-hand quantity per product and location with a `low` flag; filter by location or `low=true`, search by product name or SKU, paginated. |
-| GET | `/levels/export` | The same report as CSV (`text/csv` attachment, up to 10,000 rows, same filters). |
-| GET | `/movements` | Full movement history, newest first, with a human-readable detail per entry; filter by product or location. |
-| GET | `/movements/export` | The history as CSV with the same filters; fields with commas, quotes, or line breaks are escaped. |
-| POST | `/transfers` | Move a positive quantity between two different locations; optional note. |
-| POST | `/adjustments` | Positive or negative correction with a required reason; zero is rejected. |
-| GET | `/valuation` | On-hand value per product at the weighted average receipt cost, with the organization total. |
+| Method | Path                | Behavior                                                                                                                                 |
+| ------ | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/levels`           | On-hand quantity per product and location with a `low` flag; filter by location or `low=true`, search by product name or SKU, paginated. |
+| GET    | `/levels/export`    | The same report as CSV (`text/csv` attachment, up to 10,000 rows, same filters).                                                         |
+| GET    | `/movements`        | Full movement history, newest first, with a human-readable detail per entry; filter by product or location.                              |
+| GET    | `/movements/export` | The history as CSV with the same filters; fields with commas, quotes, or line breaks are escaped.                                        |
+| POST   | `/transfers`        | Move a positive quantity between two different locations; optional note.                                                                 |
+| POST   | `/adjustments`      | Positive or negative correction with a required reason; zero is rejected.                                                                |
+| GET    | `/valuation`        | On-hand value per product at the weighted average receipt cost, with the organization total.                                             |
 
 A transfer writes one `TRANSFER_OUT` and one `TRANSFER_IN` movement plus the
 transfer record in a single transaction; an adjustment writes one `ADJUSTMENT`
@@ -343,12 +343,12 @@ Admins manage invitations under `/organizations/:organizationId/invitations`;
 accepting is a separate authenticated route because the invitee is not a member
 yet.
 
-| Method | Path | Behavior |
-| --- | --- | --- |
-| GET | `/organizations/:id/invitations` | Pending (unexpired) invitations with roles and inviter. |
-| POST | `/organizations/:id/invitations` | Invites an email with a role set and emails a single-use link; re-inviting replaces the pending link. |
-| DELETE | `/organizations/:id/invitations/:invitationId` | Revokes a pending invitation; its link stops working. |
-| POST | `/invitations/accept` | Consumes `{ token }` for the signed-in, verified user and creates the membership. |
+| Method | Path                                           | Behavior                                                                                              |
+| ------ | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| GET    | `/organizations/:id/invitations`               | Pending (unexpired) invitations with roles and inviter.                                               |
+| POST   | `/organizations/:id/invitations`               | Invites an email with a role set and emails a single-use link; re-inviting replaces the pending link. |
+| DELETE | `/organizations/:id/invitations/:invitationId` | Revokes a pending invitation; its link stops working.                                                 |
+| POST   | `/invitations/accept`                          | Consumes `{ token }` for the signed-in, verified user and creates the membership.                     |
 
 Invitations store only SHA-256 token digests, expire after seven days, and are
 bound to a lowercase email address; the database enforces the same normalized
@@ -382,22 +382,68 @@ Tests cover event recording across all instrumented flows, ordering,
 pagination, role enforcement, and tenant isolation, plus database constraints
 for non-blank fields and the two deletion behaviors.
 
+## Order Webhooks
+
+Organizations can stream purchase order events to external systems.
+Administrators manage endpoints from a workspace settings screen or the API;
+other members get 403, outsiders 404.
+
+| Method | Path                                                 | Behavior                                                                   |
+| ------ | ---------------------------------------------------- | -------------------------------------------------------------------------- |
+| GET    | `/organizations/:organizationId/webhooks`            | List endpoints without secrets.                                            |
+| POST   | `/organizations/:organizationId/webhooks`            | Create an endpoint from an `http(s)` URL; returns the signing secret once. |
+| PATCH  | `/organizations/:organizationId/webhooks/:webhookId` | Enable or disable deliveries with `{ active }`.                            |
+| DELETE | `/organizations/:organizationId/webhooks/:webhookId` | Remove the endpoint; returns 204.                                          |
+
+The signing secret is 64 hex characters generated server-side on creation and
+returned only in that response; list and update responses never include it.
+Endpoint changes are recorded in the audit log.
+
+Every purchase order transition — `order.submitted`, `order.approved`,
+`order.rejected`, `order.received`, `order.cancelled`, and `order.revised` —
+posts one JSON body to each active endpoint:
+
+```json
+{
+  "event": "order.approved",
+  "organizationId": "…",
+  "order": {
+    "id": "…",
+    "reference": "PO-0001",
+    "status": "APPROVED",
+    "total": "255.00"
+  },
+  "occurredAt": "2026-10-04T12:00:00.000Z"
+}
+```
+
+Each request carries an `X-StockFlow-Event` header and an
+`X-StockFlow-Signature: sha256=<hex>` header, the HMAC-SHA256 of the raw body
+keyed with the endpoint secret. Receivers should recompute the HMAC over the
+exact bytes received and compare with a constant-time check. Deliveries use a
+five-second timeout, never follow redirects, and are best effort: an
+unreachable receiver or non-2xx answer logs a warning and never blocks or
+rolls back the order change, and there is no retry queue. Disabled endpoints
+are skipped. Integration tests verify the signature against a live local HTTP
+receiver, that disabled endpoints receive nothing, and that an unreachable
+endpoint does not block receiving an order.
+
 ## Authentication API
 
 All endpoints are under `/api`. Routes require a bearer session by default;
 registration, login, email-link confirmation, reset requests, liveness, and readiness
 are explicitly public.
 
-| Method | Path | Behavior |
-| --- | --- | --- |
-| POST | `/auth/register` | Create a user and a session atomically; returns 201. |
-| POST | `/auth/login` | Check credentials and issue a new session; returns 200. |
-| GET | `/auth/me` | Return the user's id, email, display name, and `emailVerifiedAt`. |
-| POST | `/auth/logout` | Revoke the current session immediately; returns 204. |
-| POST | `/auth/email/verification` | Authenticated resend request; returns 200, or 503 on delivery failure. |
-| POST | `/auth/email/verify` | Consume `{ token }` and verify its account; returns 200. |
-| POST | `/auth/password/reset-request` | Accept `{ email }`; always returns the same 202 message for known/unknown accounts. |
-| POST | `/auth/password/reset` | Consume `{ token, password }`, replace credentials, and revoke sessions; returns 200. |
+| Method | Path                           | Behavior                                                                              |
+| ------ | ------------------------------ | ------------------------------------------------------------------------------------- |
+| POST   | `/auth/register`               | Create a user and a session atomically; returns 201.                                  |
+| POST   | `/auth/login`                  | Check credentials and issue a new session; returns 200.                               |
+| GET    | `/auth/me`                     | Return the user's id, email, display name, and `emailVerifiedAt`.                     |
+| POST   | `/auth/logout`                 | Revoke the current session immediately; returns 204.                                  |
+| POST   | `/auth/email/verification`     | Authenticated resend request; returns 200, or 503 on delivery failure.                |
+| POST   | `/auth/email/verify`           | Consume `{ token }` and verify its account; returns 200.                              |
+| POST   | `/auth/password/reset-request` | Accept `{ email }`; always returns the same 202 message for known/unknown accounts.   |
+| POST   | `/auth/password/reset`         | Consume `{ token, password }`, replace credentials, and revoke sessions; returns 200. |
 
 Registration accepts only `email`, `displayName`, and `password`; login accepts only
 `email` and `password`. Emails are trimmed and lowercased. New passwords must contain
@@ -505,22 +551,22 @@ launch, add a durable mail queue, retry/monitoring, and appropriate abuse contro
 
 - `/` opens sign-in or the last selected organization, with access checked by NestJS.
 - `/login` and `/signup` include validated fields, password visibility controls,
-	matching password confirmation, pending states, and safe API error messages.
+  matching password confirmation, pending states, and safe API error messages.
 - `/organizations` lists only current memberships, supports name search, and creates
-	organizations with a currency selected from the platform's supported currencies.
+  organizations with a currency selected from the platform's supported currencies.
 - `/workspace/:organizationId` shows the real organization and current roles.
-	Every member sees the workspace pulse: on-hand balance, low-stock, and
-	awaiting-approval counts that link to the filtered screens, plus the five most
-	recent stock movements and a weekly activity table — eight ISO weeks of new
-	orders, received units, and movement counts from
-	`GET /organizations/:organizationId/trends`, with empty weeks kept as zeros so
-	quiet periods are visible rather than skipped.
-	Admins can rename the organization and inspect its members; other members cannot.
-	Admins also invite members by email with a role set, see pending invitations with
-	their expiry, and revoke them; `/invitations/accept` lets a signed-in, verified
-	user consume an emailed invitation link and join with the invited roles. Admins
-	edit each member's roles through a checkbox dialog and remove members; demoting
-	or removing the only administrator shows a clear error from the API guard.- `/workspace/:organizationId/products` lists the organization's catalog with search,
+  Every member sees the workspace pulse: on-hand balance, low-stock, and
+  awaiting-approval counts that link to the filtered screens, plus the five most
+  recent stock movements and a weekly activity table — eight ISO weeks of new
+  orders, received units, and movement counts from
+  `GET /organizations/:organizationId/trends`, with empty weeks kept as zeros so
+  quiet periods are visible rather than skipped.
+  Admins can rename the organization and inspect its members; other members cannot.
+  Admins also invite members by email with a role set, see pending invitations with
+  their expiry, and revoke them; `/invitations/accept` lets a signed-in, verified
+  user consume an emailed invitation link and join with the invited roles. Admins
+  edit each member's roles through a checkbox dialog and remove members; demoting
+  or removing the only administrator shows a clear error from the API guard.- `/workspace/:organizationId/products` lists the organization's catalog with search,
   an active/archived/all filter, and pagination. Admins and managers create, edit,
   archive, and restore products through dialogs; other members see a read-only list.
   Search, filter, and paging run server-side through GET parameters, so catalog URLs
@@ -574,15 +620,17 @@ Every organization route requires a valid bearer session and verified email. The
 the server-side session, never a submitted user id. A user selects an organization
 using its URL id; arbitrary headers cannot change the authorization scope.
 
-| Method | Path | Required access |
-| --- | --- | --- |
-| GET | `/organizations` | Lists only the caller's organizations and roles. |
-| POST | `/organizations` | Any verified authenticated user; creates their `ADMIN` membership atomically. |
-| GET | `/organizations/:organizationId` | Current membership in that organization. |
-| PATCH | `/organizations/:organizationId` | Current `ADMIN` role; renames the organization only. |
-| GET | `/organizations/:organizationId/members` | Current `ADMIN` role; returns safe member profiles and roles, paginated. |
-| PATCH | `/organizations/:organizationId/members/:memberUserId` | Current `ADMIN` role; replaces a member's role set. |
-| DELETE | `/organizations/:organizationId/members/:memberUserId` | Current `ADMIN` role; removes the membership. |
+| Method | Path                                                   | Required access                                                               |
+| ------ | ------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| GET    | `/organizations`                                       | Lists only the caller's organizations and roles.                              |
+| POST   | `/organizations`                                       | Any verified authenticated user; creates their `ADMIN` membership atomically. |
+| GET    | `/organizations/:organizationId`                       | Current membership in that organization.                                      |
+| PATCH  | `/organizations/:organizationId`                       | Current `ADMIN` role; renames the organization only.                          |
+| POST   | `/organizations/:organizationId/archive`               | Current `ADMIN` role; makes the organization read-only.                       |
+| POST   | `/organizations/:organizationId/restore`               | Current `ADMIN` role; reactivates an archived organization.                   |
+| GET    | `/organizations/:organizationId/members`               | Current `ADMIN` role; returns safe member profiles and roles, paginated.      |
+| PATCH  | `/organizations/:organizationId/members/:memberUserId` | Current `ADMIN` role; replaces a member's role set.                           |
+| DELETE | `/organizations/:organizationId/members/:memberUserId` | Current `ADMIN` role; removes the membership.                                 |
 
 Create accepts only `name` and `currency`; rename accepts only `name`. Clients cannot
 assign themselves roles, provide an owner id, or change currency through rename.
@@ -608,6 +656,20 @@ Future inventory and purchasing endpoints must apply these guards and scope ever
 query by the authenticated membership; the current guards do not automatically
 secure arbitrary future queries, exports, or background jobs. PostgreSQL row-level
 security is not configured in this milestone.
+
+### Organization Archiving
+
+Administrators can archive an organization instead of deleting it. Archiving sets
+an `archived_at` timestamp; nothing is removed. While archived, the shared access
+guard rejects every non-read request under `/organizations/:organizationId` with
+409 for all members, administrators included — the only exception is the restore
+endpoint itself. Reads keep working unchanged: every screen, report, audit page,
+and CSV export stays available, so an archived workspace remains a browsable
+record. Pending invitations can no longer be accepted (the accept endpoint
+answers 409), archived organizations are excluded from the low-stock digest
+sweep, and archiving and restoring are both recorded in the audit log. The web
+overview shows a read-only banner, hides the profile form, and offers a restore
+button while archived; archiving requires a confirmation dialog.
 
 ## Local Development
 
@@ -856,8 +918,12 @@ Milestone 23 speeds up onboarding: managers import whole product catalogs from
 CSV with all-or-nothing semantics and line-numbered error reports. Milestone 24
 closes the reorder loop proactively: a scheduled sweep emails each organization
 a daily low-stock digest at its reply-to address, with a race-safe send window
-for multi-instance deployments. Possible next steps: archiving entire
-organizations, or webhooks for order events.
+for multi-instance deployments. Milestone 25 hardens the organization lifecycle
+and opens the platform to integrations: administrators archive organizations
+into an audited read-only state (and restore them), while order webhooks stream
+signed purchase order events to admin-managed endpoints with a reveal-once
+secret and a settings screen. Possible next steps: webhook delivery logs with
+retries, or saved report snapshots.
 
 ## Commit Workflow
 
