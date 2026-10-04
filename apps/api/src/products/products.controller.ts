@@ -53,7 +53,7 @@ export class ProductsController {
 
   @Post('import')
   @Roles('ADMIN', 'MANAGER')
-  @HttpCode(201)
+  @HttpCode(200)
   @Header('Cache-Control', 'no-store')
   importCsv(
     @Req() request: AuthenticatedRequest,

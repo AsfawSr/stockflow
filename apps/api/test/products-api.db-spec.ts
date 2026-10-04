@@ -397,8 +397,8 @@ describe('Product API against PostgreSQL', () => {
           'HDMI-2M,HDMI Cable 2m,piece,,',
           'SSD-1TB,NVMe SSD 1TB,piece,"With ""heatsink""",5',
         ].join('\r\n'),
-      ).expect(201);
-      expect(imported.body).toEqual({ created: 3 });
+      ).expect(200);
+      expect(imported.body).toEqual({ created: 3, errors: [] });
       const list = await request(app.getHttpServer())
         .get(`${base}?pageSize=10`)
         .set('Authorization', owner.auth)
@@ -431,7 +431,8 @@ describe('Product API against PostgreSQL', () => {
           'HDMI-2M,Already Exists,piece,',
           'VALID-02,Bad Reorder,piece,ten',
         ].join('\n'),
-      ).expect(400);
+      ).expect(200);
+      expect(invalid.body.created).toBe(0);
       expect(invalid.body.errors).toEqual([
         { line: 3, message: 'SKU must use letters, digits, dots, underscores, or hyphens.' },
         { line: 4, message: 'Duplicate SKU "VALID-01" in the file.' },
@@ -445,17 +446,17 @@ describe('Product API against PostgreSQL', () => {
       expect(after.body.total).toBe(0);
 
       // Structural problems are caught at the header line.
-      const missing = await importCsv('sku,name\nA-1,Name').expect(400);
+      const missing = await importCsv('sku,name\nA-1,Name').expect(200);
       expect(missing.body.errors).toEqual([
         { line: 1, message: 'Missing required column "unit".' },
       ]);
-      const unknown = await importCsv('sku,name,unit,price\nA-1,Name,piece,4').expect(400);
+      const unknown = await importCsv('sku,name,unit,price\nA-1,Name,piece,4').expect(200);
       expect(unknown.body.errors).toEqual([{ line: 1, message: 'Unknown column "price".' }]);
-      const headerOnly = await importCsv('sku,name,unit').expect(400);
+      const headerOnly = await importCsv('sku,name,unit').expect(200);
       expect(headerOnly.body.errors).toEqual([
         { line: 1, message: 'Add at least one product row.' },
       ]);
-      const unterminated = await importCsv('sku,name,unit\n"A-1,Name,piece').expect(400);
+      const unterminated = await importCsv('sku,name,unit\n"A-1,Name,piece').expect(200);
       expect(unterminated.body.errors).toEqual([
         { line: 1, message: 'Unterminated quoted field.' },
       ]);

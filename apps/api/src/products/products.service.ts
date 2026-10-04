@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { parseCsv } from '../common/csv';
 import { Prisma } from '../generated/prisma/client';
@@ -95,11 +90,10 @@ export class ProductsService {
     }
   }
 
-  // All-or-nothing: every row is validated before anything is written.
+  // All-or-nothing: every row is validated before anything is written. Problems come
+  // back as a structured report rather than an opaque 400 so the UI can show lines.
   async importCsv(organizationId: string, actorId: string, csv: string) {
-    const fail = (errors: { line: number; message: string }[]): never => {
-      throw new BadRequestException({ message: 'The CSV could not be imported.', errors });
-    };
+    const fail = (errors: { line: number; message: string }[]) => ({ created: 0, errors });
     let rows: string[][];
     try {
       rows = parseCsv(csv);
@@ -180,7 +174,7 @@ export class ProductsService {
       entityType: 'product',
       summary: `Imported ${products.length} ${products.length === 1 ? 'product' : 'products'} from CSV`,
     });
-    return { created: products.length };
+    return { created: products.length, errors: [] };
   }
 
   async update(organizationId: string, productId: string, input: UpdateProductDto) {
