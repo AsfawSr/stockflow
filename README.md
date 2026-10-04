@@ -128,6 +128,7 @@ roles are required to change it. Nonmembers receive 404 for the whole subtree.
 | GET | `/` | Member; lists products with `search`, `status`, `page`, and `pageSize`. |
 | GET | `/:productId` | Member; returns one product in this organization. |
 | POST | `/` | `ADMIN`/`MANAGER`; creates a product from `sku`, `name`, `unit`, `description?`. |
+| POST | `/import` | `ADMIN`/`MANAGER`; imports a CSV catalog all-or-nothing. |
 | PATCH | `/:productId` | `ADMIN`/`MANAGER`; updates any of those fields, at least one required. |
 | POST | `/:productId/archive` | `ADMIN`/`MANAGER`; archives an active product. |
 | POST | `/:productId/restore` | `ADMIN`/`MANAGER`; restores an archived product. |
@@ -143,6 +144,16 @@ malformed UUIDs, and other organizations' product ids return 404. Client-supplie
 `organizationId` or `archivedAt` body fields are rejected rather than trusted.
 The API tests cover role denial, cross-tenant 404s, duplicate SKU conflicts across
 create and update, filtering, and pagination against real PostgreSQL.
+
+CSV import takes a `sku,name,unit` header (plus optional `description` and
+`reorder_point`, any order, case-insensitive) and applies the same normalization
+rules as single-product creation. Every row is validated before anything is
+written: duplicates within the file, collisions with existing SKUs, and
+per-field problems all come back as `{ created: 0, errors: [{ line, message }] }`
+so the import dialog can point at exact lines, and a clean file is inserted in
+one transaction with a single `product.imported` audit event. The products
+screen offers the upload behind the same manager roles; nothing is ever
+partially imported.
 
 ## Supplier and Location APIs
 
@@ -831,8 +842,9 @@ organization can set a reply-to address in its profile, enforced lowercase by
 a database check and attached to outgoing order mail. Milestone 22 makes the
 project easy to show: `npm run demo:seed` builds a complete demo workspace
 through the public API with orders in every state, stock history, and metrics.
-Possible next steps: archiving entire organizations, or CSV import for the
-product catalog.
+Milestone 23 speeds up onboarding: managers import whole product catalogs from
+CSV with all-or-nothing semantics and line-numbered error reports. Possible
+next steps: archiving entire organizations, or saved low-stock email digests.
 
 ## Commit Workflow
 
