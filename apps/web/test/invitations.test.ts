@@ -9,10 +9,33 @@ import {
   memberListSchema,
   memberRolesInputSchema,
   memberSchema,
+  membershipSchema,
   replyToEmailInputSchema,
 } from '../src/lib/contracts';
 
 const uuid = '8ed13b94-fd8b-4079-848e-f22edaa8ce05';
+
+test('tracks the organization archive state in memberships', () => {
+  const organization = {
+    id: uuid,
+    name: 'Archive Test',
+    currency: 'USD',
+    replyToEmail: null,
+    archivedAt: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    roles: ['ADMIN'],
+  };
+  assert.equal(membershipSchema.safeParse(organization).success, true);
+  assert.equal(
+    membershipSchema.safeParse({ ...organization, archivedAt: new Date().toISOString() }).success,
+    true,
+  );
+  assert.equal(
+    membershipSchema.safeParse({ ...organization, archivedAt: undefined }).success,
+    false,
+  );
+});
 
 test('normalizes the order reply-to email and stores blanks as null', () => {
   assert.equal(replyToEmailInputSchema.parse(' Purchasing@Orders.test '), 'purchasing@orders.test');

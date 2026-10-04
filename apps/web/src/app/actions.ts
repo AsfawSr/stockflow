@@ -221,6 +221,42 @@ export async function renameOrganizationAction(
   return { success: 'Organization updated.' };
 }
 
+export async function archiveOrganizationAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const id = organizationIdSchema.safeParse(form.get('organizationId'));
+  if (!id.success) return { error: 'Choose a valid organization.' };
+  const result = await actionRequest(`/organizations/${id.data}/archive`, organizationSchema, {
+    method: 'POST',
+    body: {},
+  });
+  if (!result.ok)
+    return {
+      error: result.status === 409 ? 'This organization is already archived.' : result.error,
+    };
+  revalidatePath('/organizations');
+  revalidatePath(`/workspace/${id.data}`);
+  return { success: 'Organization archived.' };
+}
+
+export async function restoreOrganizationAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const id = organizationIdSchema.safeParse(form.get('organizationId'));
+  if (!id.success) return { error: 'Choose a valid organization.' };
+  const result = await actionRequest(`/organizations/${id.data}/restore`, organizationSchema, {
+    method: 'POST',
+    body: {},
+  });
+  if (!result.ok)
+    return { error: result.status === 409 ? 'This organization is not archived.' : result.error };
+  revalidatePath('/organizations');
+  revalidatePath(`/workspace/${id.data}`);
+  return { success: 'Organization restored.' };
+}
+
 const duplicateSkuMessage = 'This SKU is already used in this organization.';
 
 function productFormValues(form: FormData) {
