@@ -152,6 +152,7 @@ export class InvitationsService {
                 name: true,
                 currency: true,
                 replyToEmail: true,
+                archivedAt: true,
                 createdAt: true,
                 updatedAt: true,
               },

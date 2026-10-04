@@ -19,6 +19,7 @@ const organizationSelect = {
   name: true,
   currency: true,
   replyToEmail: true,
+  archivedAt: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -115,6 +116,24 @@ export class OrganizationsService {
       }
       throw error;
     }
+  }
+
+  // Archiving freezes the workspace; history stays readable and restorable.
+  async archive(userId: string, organizationId: string) {
+    const updated = await this.prisma.organization.updateMany({
+      where: { id: organizationId, archivedAt: null },
+      data: { archivedAt: new Date() },
+    });
+    if (updated.count !== 1) throw new ConflictException('This organization is already archived.');
+    await this.audit.record({
+      organizationId,
+      actorId: userId,
+      action: 'organization.archived',
+      entityType: 'organization',
+      entityId: organizationId,
+      summary: 'Archived the organization',
+    });
+    return this.get(userId, organizationId);
   }
 
   async members(userId: string, organizationId: string, query: PageQueryDto) {
