@@ -1,7 +1,11 @@
 import { Package, Search } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/components/app-shell';
-import { ArchiveToggleButton, ProductDialogButton } from '@/components/product-forms';
+import {
+  ArchiveToggleButton,
+  ImportProductsButton,
+  ProductDialogButton,
+} from '@/components/product-forms';
 import { catalogQuerySchema, productListSchema, type ProductStatus } from '@/lib/contracts';
 import { authenticatedRequest, requireOrganization, requireUser } from '@/lib/session';
 
@@ -56,7 +60,12 @@ export default async function ProductsPage({
           <p className="eyebrow">ORGANIZATION CATALOG</p>
           <h1>Products</h1>
         </div>
-        {manager && <ProductDialogButton organizationId={organization.id} />}
+        {manager && (
+          <div className="button-row">
+            <ImportProductsButton organizationId={organization.id} />
+            <ProductDialogButton organizationId={organization.id} />
+          </div>
+        )}
       </div>
 
       <form className="catalog-toolbar" action={`/workspace/${organization.id}/products`}>

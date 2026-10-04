@@ -314,6 +314,34 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await page.getByRole('button', { name: 'Restore USB-C_65W.01', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'No archived products' })).toBeVisible();
 
+  // CSV import creates every valid row at once and reports bad files by line.
+  await page.getByLabel('Show', { exact: true }).selectOption('active');
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await page.getByRole('button', { name: 'Import CSV', exact: true }).click();
+  const importDialog = page.getByRole('dialog', { name: 'Import products', exact: true });
+  await importDialog.getByLabel('CSV file', { exact: true }).setInputFiles({
+    name: 'catalog.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      'sku,name,unit,description\nDESK-LAMP,Desk Lamp,piece,"Warm, dimmable LED"\nMOUSE-PAD,Mouse Pad,piece,\n',
+    ),
+  });
+  await importDialog.getByRole('button', { name: 'Import', exact: true }).click();
+  await expect(importDialog).not.toBeVisible();
+  await expect(page.getByText('Desk Lamp', { exact: true })).toBeVisible();
+  await expect(page.getByText('Mouse Pad', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Import CSV', exact: true }).click();
+  await importDialog.getByLabel('CSV file', { exact: true }).setInputFiles({
+    name: 'broken.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('sku,name\nBAD-ROW,Missing Unit\n'),
+  });
+  await importDialog.getByRole('button', { name: 'Import', exact: true }).click();
+  await expect(importDialog.getByRole('alert')).toContainText(
+    'Line 1: Missing required column "unit".',
+  );
+  await importDialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
+
   await page.getByRole('link', { name: 'Suppliers', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'No suppliers yet', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'New supplier', exact: true }).click();

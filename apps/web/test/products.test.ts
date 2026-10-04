@@ -2,10 +2,27 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   catalogQuerySchema,
+  importResultSchema,
   productInputSchema,
   productListSchema,
   productSchema,
 } from '../src/lib/contracts';
+
+test('validates import results with line-numbered problems', () => {
+  assert.equal(importResultSchema.safeParse({ created: 2, errors: [] }).success, true);
+  assert.equal(
+    importResultSchema.safeParse({
+      created: 0,
+      errors: [{ line: 2, message: 'Duplicate SKU' }],
+    }).success,
+    true,
+  );
+  assert.equal(importResultSchema.safeParse({ created: 2 }).success, false);
+  assert.equal(
+    importResultSchema.safeParse({ created: 0, errors: [{ line: 0, message: 'x' }] }).success,
+    false,
+  );
+});
 
 const product = {
   id: '8ed13b94-fd8b-4079-848e-f22edaa8ce05',

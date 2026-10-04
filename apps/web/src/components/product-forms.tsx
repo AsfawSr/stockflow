@@ -1,8 +1,13 @@
 'use client';
 
 import { useActionState, useEffect, useId, useRef, useState } from 'react';
-import { Archive, ArchiveRestore, Pencil, Plus, X } from 'lucide-react';
-import { createProductAction, setProductArchivedAction, updateProductAction } from '@/app/actions';
+import { Archive, ArchiveRestore, Pencil, Plus, Upload, X } from 'lucide-react';
+import {
+  createProductAction,
+  importProductsAction,
+  setProductArchivedAction,
+  updateProductAction,
+} from '@/app/actions';
 import type { FormState, Product } from '@/lib/contracts';
 import { FieldError, FormFeedback, SubmitButton } from './form-controls';
 
@@ -195,6 +200,64 @@ export function ProductDialogButton({
           onDone={close}
           onPendingChange={setPending}
         />
+      </dialog>
+    </>
+  );
+}
+
+function ImportForm({ organizationId, onDone }: { organizationId: string; onDone: () => void }) {
+  const [state, action] = useActionState(importProductsAction, {} as FormState);
+  useEffect(() => {
+    if (state.success) onDone();
+  }, [state.success, onDone]);
+  return (
+    <form action={action} className="stacked-form">
+      <input type="hidden" name="organizationId" value={organizationId} />
+      <FormFeedback state={state} />
+      <div className="form-field">
+        <label htmlFor="import-file">CSV file</label>
+        <input id="import-file" name="file" type="file" accept=".csv,text/csv" required />
+        <p className="field-hint">
+          Columns: sku, name, unit, and optionally description and reorder_point. Nothing is
+          imported unless every row is valid.
+        </p>
+      </div>
+      <div className="dialog-actions">
+        <SubmitButton pendingText="Importing...">
+          <Upload size={16} aria-hidden="true" />
+          Import
+        </SubmitButton>
+      </div>
+    </form>
+  );
+}
+
+export function ImportProductsButton({ organizationId }: { organizationId: string }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [formKey, setFormKey] = useState(0);
+  const close = () => {
+    dialog.current?.close();
+    setFormKey((key) => key + 1);
+  };
+  return (
+    <>
+      <button className="secondary-button" onClick={() => dialog.current?.showModal()}>
+        <Upload size={16} aria-hidden="true" />
+        Import CSV
+      </button>
+      <dialog className="organization-dialog" ref={dialog} aria-label="Import products">
+        <div className="dialog-heading">
+          <h2>Import products</h2>
+          <button
+            className="icon-button"
+            aria-label="Close dialog"
+            title="Close dialog"
+            onClick={close}
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <ImportForm key={formKey} organizationId={organizationId} onDone={close} />
       </dialog>
     </>
   );

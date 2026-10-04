@@ -159,6 +159,10 @@ export const productSchema = z.object({
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
+export const importResultSchema = z.object({
+  created: z.number().int().nonnegative(),
+  errors: z.array(z.object({ line: z.number().int().positive(), message: z.string().min(1) })),
+});
 export const productListSchema = z.object({
   items: z.array(productSchema),
   total: z.number().int().nonnegative(),

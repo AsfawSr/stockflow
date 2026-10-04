@@ -23,6 +23,7 @@ import {
   organizationSchema,
   productInputSchema,
   productSchema,
+  importResultSchema,
   createOrderInputSchema,
   orderFromSuggestionInputSchema,
   orderLineInputSchema,
@@ -253,6 +254,38 @@ export async function createProductAction(
     return { error: result.status === 409 ? duplicateSkuMessage : result.error, values };
   revalidatePath(`/workspace/${organizationId.data}/products`);
   return { success: 'Product created.' };
+}
+
+export async function importProductsAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  if (!organizationId.success) return { error: 'Choose a valid organization.' };
+  const file = form.get('file');
+  if (!(file instanceof File) || file.size === 0) return { error: 'Choose a CSV file to import.' };
+  if (file.size > 64_000) return { error: 'Use a CSV file under 64 KB.' };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/products/import`,
+    importResultSchema,
+    { method: 'POST', body: { csv: await file.text() } },
+  );
+  if (!result.ok) return { error: result.error };
+  if (result.data.errors.length > 0) {
+    const shown = result.data.errors
+      .slice(0, 3)
+      .map((problem) => `Line ${problem.line}: ${problem.message}`);
+    const extra = result.data.errors.length - shown.length;
+    return {
+      error:
+        shown.join(' ') +
+        (extra > 0 ? ` …and ${extra} more problem${extra === 1 ? '' : 's'}.` : ''),
+    };
+  }
+  revalidatePath(`/workspace/${organizationId.data}/products`);
+  return {
+    success: `Imported ${result.data.created} ${result.data.created === 1 ? 'product' : 'products'}.`,
+  };
 }
 
 export async function updateProductAction(
