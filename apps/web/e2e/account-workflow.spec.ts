@@ -96,6 +96,9 @@ test.afterAll(async () => {
     await database.query('DELETE FROM audit_events WHERE organization_id = ANY($1::uuid[])', [
       ownedIds,
     ]);
+    await database.query('DELETE FROM webhook_endpoints WHERE organization_id = ANY($1::uuid[])', [
+      ownedIds,
+    ]);
     await database.query(
       'DELETE FROM memberships WHERE organization_id = ANY($1::uuid[]) AND user_id = ANY($2::uuid[])',
       [ownedIds, userIds],
@@ -823,6 +826,31 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await page.screenshot({ path: testInfo.outputPath('workspace-mobile.png'), fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto('/');
+  await expect(page).toHaveURL(new RegExp(`/workspace/${secondId}$`));
+
+  // Webhooks stream order events to admin-managed endpoints; the secret is shown exactly once.
+  const webhookUrl = 'https://example.test/hooks/stockflow';
+  await page.getByRole('link', { name: 'Webhooks', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'No webhooks yet', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Add webhook', exact: true }).click();
+  const webhookDialog = page.getByRole('dialog', { name: 'Add webhook', exact: true });
+  await webhookDialog.getByLabel('Delivery URL', { exact: true }).fill(webhookUrl);
+  await webhookDialog.getByRole('button', { name: 'Add webhook', exact: true }).click();
+  const secret = await webhookDialog.getByTestId('webhook-secret').innerText();
+  expect(secret).toMatch(/^[0-9a-f]{64}$/);
+  await webhookDialog.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(webhookDialog).not.toBeVisible();
+  await expect(page.getByRole('cell', { name: webhookUrl, exact: true })).toBeVisible();
+  await expect(page.getByText('Active', { exact: true })).toBeVisible();
+  await expect(page.getByText(secret)).toHaveCount(0);
+  await checkLayouts(page);
+  await page.getByRole('button', { name: `Disable ${webhookUrl}`, exact: true }).click();
+  await expect(page.getByText('Disabled', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: `Enable ${webhookUrl}`, exact: true }).click();
+  await expect(page.getByText('Active', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: `Delete ${webhookUrl}`, exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'No webhooks yet', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Back to overview', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/workspace/${secondId}$`));
 
   // Archiving locks the workspace to read-only until an administrator restores it.

@@ -78,6 +78,21 @@ export const auditListSchema = z.object({
   page: z.number().int().positive(),
   pageSize: z.number().int().positive(),
 });
+export const webhookSchema = z.object({
+  id: z.uuid(),
+  url: z.string().min(1).max(2048),
+  active: z.boolean(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export const createdWebhookSchema = webhookSchema.extend({ secret: z.string().min(1).max(128) });
+export const webhookListSchema = z.object({ items: z.array(webhookSchema) });
+export const webhookUrlInputSchema = z
+  .string()
+  .trim()
+  .max(2048)
+  .regex(/^https?:\/\/\S+$/, 'Enter an http(s) URL without spaces.');
+export type Webhook = z.infer<typeof webhookSchema>;
 export const trendListSchema = z.object({
   weeks: z.array(
     z.object({

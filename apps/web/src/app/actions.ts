@@ -36,6 +36,9 @@ import {
   signupSchema,
   supplierInputSchema,
   supplierSchema,
+  createdWebhookSchema,
+  webhookSchema,
+  webhookUrlInputSchema,
   type FormState,
 } from '@/lib/contracts';
 import {
@@ -873,4 +876,73 @@ export async function removeMemberAction(_previous: FormState, form: FormData): 
     return { error: result.status === 409 ? lastAdminMessage : result.error };
   revalidatePath(`/workspace/${organizationId.data}`);
   return { success: 'Member removed.' };
+}
+
+export async function createWebhookAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  if (!organizationId.success) return { error: 'Choose a valid organization.' };
+  const values = { url: String(form.get('url') ?? '') };
+  const url = webhookUrlInputSchema.safeParse(values.url);
+  if (!url.success) return { fieldErrors: { url: [url.error.issues[0].message] }, values };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/webhooks`,
+    createdWebhookSchema,
+    { method: 'POST', body: { url: url.data } },
+  );
+  if (!result.ok)
+    return {
+      error: result.status === 409 ? 'This organization is archived and read-only.' : result.error,
+      values,
+    };
+  revalidatePath(`/workspace/${organizationId.data}/webhooks`);
+  return {
+    success: 'Webhook added. Copy the signing secret now; it is shown only once.',
+    values: { url: result.data.url, secret: result.data.secret },
+  };
+}
+
+export async function updateWebhookAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const webhookId = organizationIdSchema.safeParse(form.get('webhookId'));
+  if (!organizationId.success || !webhookId.success)
+    return { error: 'This webhook is no longer available.' };
+  const active = form.get('active') === 'true';
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/webhooks/${webhookId.data}`,
+    webhookSchema,
+    { method: 'PATCH', body: { active } },
+  );
+  if (!result.ok)
+    return {
+      error: result.status === 409 ? 'This organization is archived and read-only.' : result.error,
+    };
+  revalidatePath(`/workspace/${organizationId.data}/webhooks`);
+  return { success: active ? 'Webhook enabled.' : 'Webhook disabled.' };
+}
+
+export async function deleteWebhookAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const webhookId = organizationIdSchema.safeParse(form.get('webhookId'));
+  if (!organizationId.success || !webhookId.success)
+    return { error: 'This webhook is no longer available.' };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/webhooks/${webhookId.data}`,
+    emptySchema,
+    { method: 'DELETE' },
+  );
+  if (!result.ok && result.status !== 404)
+    return {
+      error: result.status === 409 ? 'This organization is archived and read-only.' : result.error,
+    };
+  revalidatePath(`/workspace/${organizationId.data}/webhooks`);
+  return { success: 'Webhook deleted.' };
 }

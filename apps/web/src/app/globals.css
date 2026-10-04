@@ -1248,6 +1248,19 @@ dd {
   padding-top: 18px;
   border-top: 1px solid var(--line);
 }
+.webhook-url {
+  overflow-wrap: anywhere;
+}
+.webhook-secret {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+}
+.webhook-secret code {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
 .organization-details {
   margin: 0;
   max-width: none;

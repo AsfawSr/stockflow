@@ -11,6 +11,9 @@ import {
   memberSchema,
   membershipSchema,
   replyToEmailInputSchema,
+  createdWebhookSchema,
+  webhookListSchema,
+  webhookUrlInputSchema,
 } from '../src/lib/contracts';
 
 const uuid = '8ed13b94-fd8b-4079-848e-f22edaa8ce05';
@@ -35,6 +38,29 @@ test('tracks the organization archive state in memberships', () => {
     membershipSchema.safeParse({ ...organization, archivedAt: undefined }).success,
     false,
   );
+});
+
+test('validates webhook endpoints and reveals the secret only on creation', () => {
+  const webhook = {
+    id: uuid,
+    url: 'https://example.test/hooks/orders',
+    active: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  assert.equal(webhookListSchema.safeParse({ items: [webhook] }).success, true);
+  assert.equal(createdWebhookSchema.safeParse(webhook).success, false);
+  assert.equal(
+    createdWebhookSchema.safeParse({ ...webhook, secret: 'a'.repeat(64) }).success,
+    true,
+  );
+  assert.equal(
+    webhookUrlInputSchema.parse(' https://example.test/hooks '),
+    'https://example.test/hooks',
+  );
+  assert.equal(webhookUrlInputSchema.safeParse('ftp://example.test/hooks').success, false);
+  assert.equal(webhookUrlInputSchema.safeParse('https://example.test/with space').success, false);
+  assert.equal(webhookUrlInputSchema.safeParse('').success, false);
 });
 
 test('normalizes the order reply-to email and stores blanks as null', () => {
