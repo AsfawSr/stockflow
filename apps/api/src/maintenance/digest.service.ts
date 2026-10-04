@@ -42,6 +42,7 @@ export class DigestService implements OnModuleInit, OnModuleDestroy {
       const organizations = await this.prisma.organization.findMany({
         where: {
           replyToEmail: { not: null },
+          archivedAt: null,
           OR: [{ lastDigestAt: null }, { lastDigestAt: { lte: cutoff } }],
         },
         select: { id: true, name: true, replyToEmail: true },

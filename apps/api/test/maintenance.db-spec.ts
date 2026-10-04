@@ -209,6 +209,26 @@ describe('Expired record cleanup against PostgreSQL', () => {
         select: { id: true },
       });
       organizationIds.push(quiet.id);
+      const archivedEmail = `${randomUUID()}@digest.test`;
+      const retired = await prisma.organization.create({
+        data: {
+          name: `Digest Archived ${randomUUID().slice(0, 8)}`,
+          currency: 'USD',
+          replyToEmail: archivedEmail,
+          archivedAt: new Date(),
+        },
+        select: { id: true },
+      });
+      organizationIds.push(retired.id);
+      await prisma.product.create({
+        data: {
+          organizationId: retired.id,
+          sku: 'DIGEST-RETIRED',
+          name: 'Retired Widget',
+          unit: 'piece',
+          reorderPoint: 5,
+        },
+      });
       const location = await prisma.location.create({
         data: { organizationId: organization.id, name: 'Digest Warehouse' },
         select: { id: true },
@@ -277,6 +297,14 @@ describe('Expired record cleanup against PostgreSQL', () => {
         select: { lastDigestAt: true },
       });
       expect(untouched.lastDigestAt).toBeNull();
+
+      // Archived organizations never hear from the digest, even with low stock.
+      expect(outbox.filter((mail) => mail.to === archivedEmail)).toHaveLength(0);
+      const skipped = await prisma.organization.findUniqueOrThrow({
+        where: { id: retired.id },
+        select: { lastDigestAt: true },
+      });
+      expect(skipped.lastDigestAt).toBeNull();
     } finally {
       await prisma.stockLevel.deleteMany({
         where: { organizationId: { in: organizationIds } },
