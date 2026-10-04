@@ -824,6 +824,39 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto('/');
   await expect(page).toHaveURL(new RegExp(`/workspace/${secondId}$`));
+
+  // Archiving locks the workspace to read-only until an administrator restores it.
+  const archivedBanner = page.locator('.form-notice', { hasText: 'archived and read-only' });
+  await page.getByRole('button', { name: 'Archive organization', exact: true }).click();
+  const archiveDialog = page.getByRole('dialog', { name: `Archive ${longName}`, exact: true });
+  await expect(archiveDialog.getByText('No data is deleted.')).toBeVisible();
+  await archiveDialog.getByRole('button', { name: 'Archive organization', exact: true }).click();
+  await expect(archiveDialog).not.toBeVisible();
+  await expect(archivedBanner).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save profile', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Archive organization', exact: true })).toHaveCount(
+    0,
+  );
+  await checkLayouts(page);
+  // The API rejects every change while archived, even from administrators.
+  await page.getByRole('button', { name: 'Invite member', exact: true }).click();
+  const archivedInvite = page.getByRole('dialog', { name: 'Invite member', exact: true });
+  await archivedInvite.getByLabel('Email address', { exact: true }).fill(emails[1]);
+  await archivedInvite.getByLabel('Manager', { exact: true }).check();
+  await archivedInvite.getByRole('button', { name: 'Send invitation', exact: true }).click();
+  await expect(archivedInvite.getByRole('alert')).toBeVisible();
+  await archivedInvite.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await expect(archivedInvite).not.toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Pending invitations', exact: true })).toHaveCount(
+    0,
+  );
+  await page.getByRole('button', { name: 'Restore organization', exact: true }).click();
+  await expect(archivedBanner).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save profile', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Archive organization', exact: true }),
+  ).toBeVisible();
+
   await page.getByRole('link', { name: 'Switch organization', exact: true }).click();
   await page.getByRole('searchbox', { name: 'Search organizations', exact: true }).fill('North');
   await page.getByRole('button', { name: `Open ${renamed}`, exact: true }).click();
