@@ -9,6 +9,7 @@ import { AccountMailer } from '../auth/account-mailer.service';
 import { AuditService } from '../audit/audit.service';
 import { Prisma, PurchaseOrderStatus } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { WebhookDispatcher } from '../webhooks/webhook-dispatcher.service';
 import {
   CreatePurchaseOrderDto,
   CreateReceiptDto,
@@ -99,6 +100,7 @@ export class PurchaseOrdersService {
     private readonly prisma: PrismaService,
     private readonly mailer: AccountMailer,
     private readonly audit: AuditService,
+    private readonly webhooks: WebhookDispatcher,
   ) {}
 
   private async requireActiveSupplier(organizationId: string, supplierId: string) {
@@ -404,6 +406,7 @@ export class PurchaseOrdersService {
       entityId: orderId,
       summary: `Submitted purchase order ${order.reference}`,
     });
+    await this.webhooks.dispatch(organizationId, 'order.submitted', order);
     return order;
   }
 
@@ -434,6 +437,11 @@ export class PurchaseOrdersService {
       summary: `${approve ? 'Approved' : 'Rejected'} purchase order ${order.reference}`,
     });
     if (approve) await this.notifySupplier(organizationId, order);
+    await this.webhooks.dispatch(
+      organizationId,
+      approve ? 'order.approved' : 'order.rejected',
+      order,
+    );
     return order;
   }
 
@@ -515,6 +523,7 @@ export class PurchaseOrdersService {
       entityId: orderId,
       summary: `Cancelled purchase order ${order.reference}`,
     });
+    await this.webhooks.dispatch(organizationId, 'order.cancelled', order);
     return order;
   }
 
@@ -534,6 +543,7 @@ export class PurchaseOrdersService {
       entityId: orderId,
       summary: `Reopened purchase order ${order.reference} for revision`,
     });
+    await this.webhooks.dispatch(organizationId, 'order.revised', order);
     return order;
   }
 
@@ -646,6 +656,7 @@ export class PurchaseOrdersService {
       entityId: orderId,
       summary: `Received ${units} ${units === 1 ? 'unit' : 'units'} for purchase order ${order.reference}`,
     });
+    await this.webhooks.dispatch(organizationId, 'order.received', order);
     return order;
   }
 }

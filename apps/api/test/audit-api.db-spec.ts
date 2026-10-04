@@ -43,6 +43,7 @@ describe('Audit log API against PostgreSQL', () => {
         membership: transaction.membership,
         accountToken: transaction.accountToken,
         auditEvent: transaction.auditEvent,
+        webhookEndpoint: transaction.webhookEndpoint,
         invitation: transaction.invitation,
         product: transaction.product,
         supplier: transaction.supplier,

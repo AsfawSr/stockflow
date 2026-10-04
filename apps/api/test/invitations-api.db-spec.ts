@@ -49,6 +49,7 @@ describe('Invitation APIs against PostgreSQL', () => {
         membership: transaction.membership,
         accountToken: transaction.accountToken,
         auditEvent: transaction.auditEvent,
+        webhookEndpoint: transaction.webhookEndpoint,
         invitation: transaction.invitation,
         $transaction: (callback: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
           callback(transaction),

@@ -50,6 +50,7 @@ describe('Purchase order workflow against PostgreSQL', () => {
       membership: transaction.membership,
       accountToken: transaction.accountToken,
       auditEvent: transaction.auditEvent,
+      webhookEndpoint: transaction.webhookEndpoint,
       product: transaction.product,
       supplier: transaction.supplier,
       location: transaction.location,
