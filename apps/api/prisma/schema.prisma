@@ -62,6 +62,7 @@ model Organization {
   purchaseOrders PurchaseOrder[]
   invitations Invitation[]
   auditEvents AuditEvent[]
+  webhookEndpoints WebhookEndpoint[]
 
   @@map("organizations")
 }
@@ -400,4 +401,18 @@ model AuditEvent {
 
   @@index([organizationId, createdAt(sort: Desc), id])
   @@map("audit_events")
+}
+
+model WebhookEndpoint {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  url            String       @db.VarChar(2048)
+  secret         String       @db.VarChar(128)
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId])
+  @@map("webhook_endpoints")
 }
