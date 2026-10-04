@@ -5,7 +5,9 @@ import { config } from 'dotenv';
 import { createHash, randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { AccountEmail, AccountMailer } from '../src/auth/account-mailer.service';
 import { CleanupService } from '../src/maintenance/cleanup.service';
+import { DigestService } from '../src/maintenance/digest.service';
 import { PostgresThrottlerStorage } from '../src/maintenance/postgres-throttler.storage';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -173,6 +175,115 @@ describe('Expired record cleanup against PostgreSQL', () => {
       await prisma.rateLimit.deleteMany({
         where: { key: { in: [`default:${key}`, `login:${key}`, `default:${otherKey}`] } },
       });
+    }
+  }, 30000);
+
+  it('sends one low-stock digest per organization per window', async () => {
+    const outbox: AccountEmail[] = [];
+    const mailer = {
+      webOrigin: 'http://127.0.0.1:3000',
+      send: async (mail: AccountEmail) => {
+        outbox.push(mail);
+      },
+    } as unknown as AccountMailer;
+    const service = new DigestService(prisma, mailer, new ConfigService({ NODE_ENV: 'test' }));
+    const digestEmail = `${randomUUID()}@digest.test`;
+    const organizationIds: string[] = [];
+    const ourMail = () => outbox.filter((mail) => mail.to === digestEmail);
+    try {
+      const organization = await prisma.organization.create({
+        data: {
+          name: `Digest ${randomUUID().slice(0, 8)}`,
+          currency: 'USD',
+          replyToEmail: digestEmail,
+        },
+        select: { id: true, name: true },
+      });
+      organizationIds.push(organization.id);
+      const quiet = await prisma.organization.create({
+        data: {
+          name: `Digest Quiet ${randomUUID().slice(0, 8)}`,
+          currency: 'USD',
+          replyToEmail: `${randomUUID()}@digest.test`,
+        },
+        select: { id: true },
+      });
+      organizationIds.push(quiet.id);
+      const location = await prisma.location.create({
+        data: { organizationId: organization.id, name: 'Digest Warehouse' },
+        select: { id: true },
+      });
+      await prisma.product.createMany({
+        data: [
+          {
+            organizationId: organization.id,
+            sku: 'DIGEST-LOW',
+            name: 'Low Widget',
+            unit: 'piece',
+            reorderPoint: 5,
+          },
+          {
+            organizationId: organization.id,
+            sku: 'DIGEST-OK',
+            name: 'Stocked Widget',
+            unit: 'piece',
+            reorderPoint: 2,
+          },
+          {
+            organizationId: organization.id,
+            sku: 'DIGEST-NONE',
+            name: 'Untracked Widget',
+            unit: 'piece',
+          },
+        ],
+      });
+      const stocked = await prisma.product.findFirstOrThrow({
+        where: { organizationId: organization.id, sku: 'DIGEST-OK' },
+        select: { id: true },
+      });
+      await prisma.stockLevel.create({
+        data: {
+          organizationId: organization.id,
+          productId: stocked.id,
+          locationId: location.id,
+          quantity: 9,
+        },
+      });
+
+      await service.sweep();
+      expect(ourMail()).toHaveLength(1);
+      const digest = ourMail()[0];
+      expect(digest.subject).toBe('Low stock digest: 1 product needs attention');
+      expect(digest.text).toContain('- Low Widget (DIGEST-LOW): 0 piece on hand, reorder at 5');
+      expect(digest.text).not.toContain('Stocked Widget');
+      expect(digest.text).not.toContain('Untracked Widget');
+      expect(digest.text).toContain(
+        `http://127.0.0.1:3000/workspace/${organization.id}/stock?show=low`,
+      );
+
+      // The window claim blocks a second send until it ages out.
+      await service.sweep();
+      expect(ourMail()).toHaveLength(1);
+      await prisma.organization.update({
+        where: { id: organization.id },
+        data: { lastDigestAt: new Date(Date.now() - 25 * HOUR) },
+      });
+      await service.sweep();
+      expect(ourMail()).toHaveLength(2);
+
+      // An organization without low stock keeps its window unclaimed.
+      const untouched = await prisma.organization.findUniqueOrThrow({
+        where: { id: quiet.id },
+        select: { lastDigestAt: true },
+      });
+      expect(untouched.lastDigestAt).toBeNull();
+    } finally {
+      await prisma.stockLevel.deleteMany({
+        where: { organizationId: { in: organizationIds } },
+      });
+      await prisma.product.deleteMany({ where: { organizationId: { in: organizationIds } } });
+      await prisma.location.deleteMany({ where: { organizationId: { in: organizationIds } } });
+      await prisma.organization.deleteMany({ where: { id: { in: organizationIds } } });
     }
   }, 30000);
 
