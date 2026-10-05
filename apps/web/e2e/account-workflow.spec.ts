@@ -804,6 +804,90 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
 
+  // Catalog quotes sit beside confirmed history and show the difference.
+  await page.getByRole('link', { name: 'Suppliers', exact: true }).click();
+  await page.getByRole('link', { name: 'Nile Electronics', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Catalog quotes', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No quotes yet', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Record quote', exact: true }).click();
+  const quoteDialog = page.getByRole('dialog', { name: 'Record quote', exact: true });
+  await quoteDialog
+    .getByLabel('Product', { exact: true })
+    .selectOption({ label: 'USB-C_65W.01 · USB-C Charger 65W' });
+  await quoteDialog.getByLabel('Quoted unit price', { exact: true }).fill('24.00');
+  await quoteDialog.getByRole('button', { name: 'Save quote', exact: true }).click();
+  await expect(quoteDialog).not.toBeVisible();
+  const quoteRow = page.getByRole('row', { name: /USB-C Charger 65W/ }).last();
+  await expect(quoteRow.getByRole('cell', { name: '24.00 ETB', exact: true })).toBeVisible();
+  await expect(
+    quoteRow.getByRole('cell', { name: '25.50 ETB (PO-0001)', exact: true }),
+  ).toBeVisible();
+  await expect(quoteRow.getByRole('cell', { name: '+1.50 (6.3%)', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Record quote', exact: true }).click();
+  await quoteDialog
+    .getByLabel('Product', { exact: true })
+    .selectOption({ label: 'DESK-LAMP · Desk Lamp' });
+  await quoteDialog.getByLabel('Quoted unit price', { exact: true }).fill('3.40');
+  await quoteDialog.getByRole('button', { name: 'Save quote', exact: true }).click();
+  await expect(quoteDialog).not.toBeVisible();
+  const lampQuoteRow = page.getByRole('row', { name: /Desk Lamp/ });
+  await expect(lampQuoteRow.getByRole('cell', { name: '3.40 ETB', exact: true })).toBeVisible();
+  await checkLayouts(page);
+
+  // A fresh draft line pre-fills from the quote instead of order history.
+  await page.getByRole('link', { name: 'Purchase orders', exact: true }).click();
+  await page.getByRole('button', { name: 'New order', exact: true }).click();
+  const quoteOrderDialog = page.getByRole('dialog', { name: 'New purchase order', exact: true });
+  await quoteOrderDialog
+    .getByLabel('Supplier', { exact: true })
+    .selectOption({ label: 'Nile Electronics' });
+  await quoteOrderDialog
+    .getByLabel('Deliver to', { exact: true })
+    .selectOption({ label: 'Main Warehouse' });
+  await quoteOrderDialog.getByRole('button', { name: 'Create draft', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'PO-0005', exact: true })).toBeVisible();
+  await page
+    .getByLabel('Product', { exact: true })
+    .selectOption({ label: 'USB-C_65W.01 · USB-C Charger 65W' });
+  await expect(page.getByLabel('Unit price', { exact: true })).toHaveValue('24.00');
+  await expect(page.getByText(/Catalog quote: 24\.00 \(updated /)).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel order', exact: true }).click();
+  await expect(page.getByText('Cancelled', { exact: true })).toBeVisible();
+
+  // Without order history, the quote sources the reorder suggestion.
+  await page.getByRole('link', { name: 'Products', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit DESK-LAMP', exact: true }).click();
+  const lampDialog = page.getByRole('dialog', { name: 'Edit DESK-LAMP', exact: true });
+  await lampDialog.getByLabel('Reorder point (optional)', { exact: true }).fill('2');
+  await lampDialog.getByRole('button', { name: 'Save product', exact: true }).click();
+  await expect(lampDialog).not.toBeVisible();
+  await page.getByRole('link', { name: 'Purchase orders', exact: true }).click();
+  await page.getByRole('link', { name: 'Reorder suggestions', exact: true }).click();
+  const lampSuggestion = page.getByRole('row', { name: /Desk Lamp/ });
+  await expect(
+    lampSuggestion.getByRole('cell', { name: 'Nile Electronics', exact: true }),
+  ).toBeVisible();
+  await expect(
+    lampSuggestion.getByRole('cell', { name: '3.40 ETB (catalog quote)', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('link', { name: 'Products', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit DESK-LAMP', exact: true }).click();
+  await lampDialog.getByLabel('Reorder point (optional)', { exact: true }).fill('');
+  await lampDialog.getByRole('button', { name: 'Save product', exact: true }).click();
+  await expect(lampDialog).not.toBeVisible();
+
+  // Removing the quotes leaves confirmed history untouched.
+  await page.getByRole('link', { name: 'Suppliers', exact: true }).click();
+  await page.getByRole('link', { name: 'Nile Electronics', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove quote for USB-C_65W.01', exact: true }).click();
+  await page.getByRole('button', { name: 'Remove quote for DESK-LAMP', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'No quotes yet', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Latest confirmed prices', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('link', { name: 'Overview', exact: true }).click();
+  await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
+
   // Invite, revoke, and re-invite the outsider before their account exists.
   await page.getByRole('button', { name: 'Invite member', exact: true }).click();
   const inviteDialog = page.getByRole('dialog', { name: 'Invite member', exact: true });
