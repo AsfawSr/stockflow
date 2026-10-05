@@ -325,4 +325,59 @@ describe('Cycle count API against PostgreSQL', () => {
         .expect(403);
     });
   }, 60000);
+
+  it('cancels open counts and freezes them afterwards', async () => {
+    await withApplication(async (app, database) => {
+      const owner = await registerVerified(app, 'Count Owner');
+      const organization = await request(app.getHttpServer())
+        .post('/api/organizations')
+        .set('Authorization', owner.auth)
+        .send({ name: `Counts ${randomUUID().slice(0, 8)}`, currency: 'USD' })
+        .expect(201);
+      const organizationId = organization.body.id as string;
+      const api = `/api/organizations/${organizationId}`;
+      const authed = (method: 'get' | 'post' | 'put' | 'delete', path: string) =>
+        request(app.getHttpServer())[method](`${api}${path}`).set('Authorization', owner.auth);
+
+      const location = await authed('post', '/locations').send({ name: 'Cancel Warehouse' });
+      const locationId = location.body.id as string;
+      const product = await authed('post', '/products').send({
+        sku: 'CANCEL-1',
+        name: 'Cancelled Widget',
+        unit: 'piece',
+      });
+      const productId = product.body.id as string;
+
+      const count = await authed('post', '/cycle-counts').send({ locationId }).expect(201);
+      const countId = count.body.id as string;
+      await authed('put', `/cycle-counts/${countId}/lines/${productId}`)
+        .send({ countedQuantity: 2 })
+        .expect(200);
+
+      const cancelled = await authed('post', `/cycle-counts/${countId}/cancel`).expect(200);
+      expect(cancelled.body.status).toBe('CANCELLED');
+      expect(cancelled.body.completedAt).toBeNull();
+      expect(cancelled.body.lines).toHaveLength(1);
+
+      // Cancelled counts reject every further change but stay readable.
+      await authed('post', `/cycle-counts/${countId}/cancel`).expect(409);
+      await authed('put', `/cycle-counts/${countId}/lines/${productId}`)
+        .send({ countedQuantity: 3 })
+        .expect(409);
+      await authed('delete', `/cycle-counts/${countId}/lines/${productId}`).expect(409);
+      await authed('get', `/cycle-counts/${countId}`).expect(200);
+      await authed('post', `/cycle-counts/${randomUUID()}/cancel`).expect(404);
+
+      const audit = await database.auditEvent.findMany({
+        where: { organizationId, action: 'count.cancelled' },
+      });
+      expect(audit).toHaveLength(1);
+      expect(audit[0].summary).toBe('Cancelled a cycle count at Cancel Warehouse');
+
+      // Archived organizations freeze even open counts.
+      const second = await authed('post', '/cycle-counts').send({ locationId }).expect(201);
+      await authed('post', '/archive').expect(200);
+      await authed('post', `/cycle-counts/${second.body.id as string}/cancel`).expect(423);
+    });
+  }, 60000);
 });

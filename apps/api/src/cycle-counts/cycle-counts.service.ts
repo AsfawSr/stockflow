@@ -153,4 +153,22 @@ export class CycleCountsService {
     });
     if (removed.count !== 1) throw new NotFoundException('This product is not in the count.');
   }
+
+  async cancel(actorId: string, organizationId: string, countId: string) {
+    const count = await this.requireOpen(organizationId, countId);
+    const updated = await this.prisma.cycleCount.updateMany({
+      where: { id: countId, status: 'OPEN' },
+      data: { status: 'CANCELLED' },
+    });
+    if (updated.count !== 1) throw new ConflictException('Only open counts can be changed.');
+    await this.audit.record({
+      organizationId,
+      actorId,
+      action: 'count.cancelled',
+      entityType: 'cycle_count',
+      entityId: countId,
+      summary: `Cancelled a cycle count at ${count.location.name}`,
+    });
+    return this.get(organizationId, countId);
+  }
 }

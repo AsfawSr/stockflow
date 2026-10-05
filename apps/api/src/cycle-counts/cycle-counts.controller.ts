@@ -73,4 +73,16 @@ export class CycleCountsController {
   ) {
     return this.counts.removeLine(organizationId, countId, productId);
   }
+
+  @Post(':countId/cancel')
+  @Roles('ADMIN', 'WAREHOUSE')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  cancel(
+    @Req() request: AuthenticatedRequest,
+    @Param('organizationId') organizationId: string,
+    @Param('countId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) countId: string,
+  ) {
+    return this.counts.cancel(request.principal.user.id, organizationId, countId);
+  }
 }
