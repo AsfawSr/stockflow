@@ -46,6 +46,14 @@ enum StockMovementType {
   @@map("stock_movement_type")
 }
 
+enum WebhookDeliveryStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+
+  @@map("webhook_delivery_status")
+}
+
 model Organization {
   id          String       @id @default(uuid()) @db.Uuid
   name        String       @db.VarChar(160)
@@ -63,6 +71,7 @@ model Organization {
   invitations Invitation[]
   auditEvents AuditEvent[]
   webhookEndpoints WebhookEndpoint[]
+  webhookDeliveries WebhookDelivery[]
 
   @@map("organizations")
 }
@@ -412,7 +421,29 @@ model WebhookEndpoint {
   createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  deliveries     WebhookDelivery[]
 
   @@index([organizationId])
   @@map("webhook_endpoints")
+}
+
+model WebhookDelivery {
+  id                String                @id @default(uuid()) @db.Uuid
+  webhookEndpointId String                @map("webhook_endpoint_id") @db.Uuid
+  organizationId    String                @map("organization_id") @db.Uuid
+  event             String                @db.VarChar(80)
+  body              String
+  status            WebhookDeliveryStatus @default(PENDING)
+  attempts          Int                   @default(0)
+  responseStatus    Int?                  @map("response_status")
+  lastError         String?               @map("last_error") @db.VarChar(400)
+  nextAttemptAt     DateTime?             @map("next_attempt_at") @db.Timestamptz(3)
+  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  endpoint          WebhookEndpoint       @relation(fields: [webhookEndpointId], references: [id], onDelete: Cascade)
+  organization      Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([status, nextAttemptAt])
+  @@index([webhookEndpointId, createdAt(sort: Desc), id])
+  @@map("webhook_deliveries")
 }
