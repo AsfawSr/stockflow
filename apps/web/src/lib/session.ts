@@ -43,7 +43,7 @@ export async function rememberedOrganization() {
 export async function authenticatedRequest<Data>(
   path: string,
   schema: z.ZodType<Data>,
-  input: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown } = {},
+  input: { method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; body?: unknown } = {},
 ): Promise<ApiResult<Data>> {
   const token = await sessionToken();
   if (!token) return { ok: false, status: 401, error: 'Sign in to continue.' };
@@ -65,7 +65,7 @@ export async function requireUser(allowUnverified = false) {
 export async function actionRequest<Data>(
   path: string,
   schema: z.ZodType<Data>,
-  input: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown } = {},
+  input: { method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; body?: unknown } = {},
 ) {
   const result = await authenticatedRequest(path, schema, input);
   if (!result.ok && result.status === 401) {

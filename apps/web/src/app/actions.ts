@@ -36,6 +36,8 @@ import {
   signupSchema,
   supplierInputSchema,
   supplierSchema,
+  catalogPriceInputSchema,
+  supplierCatalogEntrySchema,
   createdWebhookSchema,
   valuationSnapshotSchema,
   webhookSchema,
@@ -957,4 +959,50 @@ export async function saveValuationSnapshotAction(
   return {
     success: `Snapshot saved at ${result.data.payload.totalValue} ${result.data.payload.currency}.`,
   };
+}
+
+export async function setCatalogPriceAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const supplierId = organizationIdSchema.safeParse(form.get('supplierId'));
+  const productId = organizationIdSchema.safeParse(form.get('productId'));
+  if (!organizationId.success || !supplierId.success || !productId.success)
+    return { error: 'This product is no longer available.' };
+  const values = { unitPrice: String(form.get('unitPrice') ?? '') };
+  const parsed = catalogPriceInputSchema.safeParse(values.unitPrice);
+  if (!parsed.success)
+    return { fieldErrors: { unitPrice: [parsed.error.issues[0].message] }, values };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/suppliers/${supplierId.data}/catalog/${productId.data}`,
+    supplierCatalogEntrySchema,
+    { method: 'PUT', body: { unitPrice: parsed.data } },
+  );
+  if (!result.ok)
+    return {
+      error: result.status === 409 ? 'Archived products cannot be quoted.' : result.error,
+      values,
+    };
+  revalidatePath(`/workspace/${organizationId.data}/suppliers/${supplierId.data}/prices`);
+  return { success: `Quoted ${result.data.product.name} at ${result.data.unitPrice}.` };
+}
+
+export async function removeCatalogPriceAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const supplierId = organizationIdSchema.safeParse(form.get('supplierId'));
+  const productId = organizationIdSchema.safeParse(form.get('productId'));
+  if (!organizationId.success || !supplierId.success || !productId.success)
+    return { error: 'This quote is no longer available.' };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/suppliers/${supplierId.data}/catalog/${productId.data}`,
+    emptySchema,
+    { method: 'DELETE' },
+  );
+  if (!result.ok && result.status !== 404) return { error: result.error };
+  revalidatePath(`/workspace/${organizationId.data}/suppliers/${supplierId.data}/prices`);
+  return { success: 'Quote removed.' };
 }

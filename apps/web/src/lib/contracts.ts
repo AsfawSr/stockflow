@@ -438,6 +438,12 @@ export const catalogPriceInputSchema = z
   .trim()
   .regex(/^\d{1,10}(\.\d{1,2})?$/, 'Enter a price such as 25 or 25.50.')
   .refine((value) => Number(value) > 0, 'Enter a price above zero.');
+export const supplierCatalogEntrySchema = z.object({
+  id: z.uuid(),
+  product: orderProductSchema,
+  unitPrice: moneySchema,
+  updatedAt: z.iso.datetime(),
+});
 export type SupplierPrice = {
   unitPrice: string;
   reference: string;

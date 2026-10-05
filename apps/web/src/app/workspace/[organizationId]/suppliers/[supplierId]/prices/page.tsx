@@ -1,9 +1,10 @@
-import { ArrowLeft, ReceiptText } from 'lucide-react';
+import { ArrowLeft, BookOpen, ReceiptText } from 'lucide-react';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
 import {
   organizationIdSchema,
+  supplierCatalogSchema,
   supplierPerformanceSchema,
   supplierPriceListSchema,
   supplierSchema,
@@ -22,7 +23,7 @@ export default async function SupplierPricesPage({
   const organization = await requireOrganization(organizationId);
   if (!organizationIdSchema.safeParse(supplierId).success) notFound();
 
-  const [supplier, prices, performance] = await Promise.all([
+  const [supplier, prices, performance, catalog] = await Promise.all([
     authenticatedRequest(
       `/organizations/${organization.id}/suppliers/${supplierId}`,
       supplierSchema,
@@ -35,10 +36,25 @@ export default async function SupplierPricesPage({
       `/organizations/${organization.id}/suppliers/${supplierId}/performance`,
       supplierPerformanceSchema,
     ),
+    authenticatedRequest(
+      `/organizations/${organization.id}/suppliers/${supplierId}/catalog`,
+      supplierCatalogSchema,
+    ),
   ]);
-  if (!supplier.ok || !prices.ok || !performance.ok) {
-    if (supplier.status === 404 || prices.status === 404 || performance.status === 404) notFound();
-    if (supplier.status === 401 || prices.status === 401 || performance.status === 401)
+  if (!supplier.ok || !prices.ok || !performance.ok || !catalog.ok) {
+    if (
+      supplier.status === 404 ||
+      prices.status === 404 ||
+      performance.status === 404 ||
+      catalog.status === 404
+    )
+      notFound();
+    if (
+      supplier.status === 401 ||
+      prices.status === 401 ||
+      performance.status === 401 ||
+      catalog.status === 401
+    )
       redirect('/login?notice=expired');
     throw new Error('The StockFlow API is unavailable.');
   }
@@ -47,6 +63,12 @@ export default async function SupplierPricesPage({
     new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(
       new Date(date),
     );
+  const quoteDifference = (quote: string, confirmed: string) => {
+    const delta = Number(confirmed) - Number(quote);
+    if (delta === 0) return 'matches the quote';
+    const percent = ((Math.abs(delta) / Number(quote)) * 100).toFixed(1);
+    return `${delta > 0 ? '+' : '\u2212'}${Math.abs(delta).toFixed(2)} (${percent}%)`;
+  };
 
   return (
     <AppShell user={user} organization={organization} section="Suppliers">
@@ -127,6 +149,64 @@ export default async function SupplierPricesPage({
                     </td>
                     <td>{item.reference}</td>
                     <td>{formatDate(item.decidedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+      <section className="workspace-section" aria-labelledby="catalog-heading">
+        <div className="section-heading">
+          <h2 id="catalog-heading">Catalog quotes</h2>
+          <span>
+            {catalog.data.items.length} {catalog.data.items.length === 1 ? 'product' : 'products'}
+          </span>
+        </div>
+        <p className="muted">
+          Quoted prices entered by hand, independent of order history. The difference shows how the
+          last confirmed order compared with the quote.
+        </p>
+        {catalog.data.items.length === 0 ? (
+          <div className="empty-organizations">
+            <BookOpen size={38} strokeWidth={1.3} aria-hidden="true" />
+            <h2>No quotes yet</h2>
+            <p className="muted">Record this supplier&apos;s quoted prices to compare offers.</p>
+          </div>
+        ) : (
+          <div className="service-table-wrapper">
+            <table className="service-table product-table">
+              <thead>
+                <tr>
+                  <th scope="col">PRODUCT</th>
+                  <th scope="col">SKU</th>
+                  <th scope="col">QUOTE</th>
+                  <th scope="col">LAST CONFIRMED</th>
+                  <th scope="col">DIFFERENCE</th>
+                  <th scope="col">UPDATED</th>
+                </tr>
+              </thead>
+              <tbody>
+                {catalog.data.items.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{entry.product.name}</td>
+                    <td>
+                      <code className="sku-cell">{entry.product.sku}</code>
+                    </td>
+                    <td>
+                      {entry.unitPrice} {organization.currency}
+                    </td>
+                    <td>
+                      {entry.lastConfirmed
+                        ? `${entry.lastConfirmed.unitPrice} ${organization.currency} (${entry.lastConfirmed.reference})`
+                        : '\u2014'}
+                    </td>
+                    <td>
+                      {entry.lastConfirmed
+                        ? quoteDifference(entry.unitPrice, entry.lastConfirmed.unitPrice)
+                        : '\u2014'}
+                    </td>
+                    <td>{formatDate(entry.updatedAt)}</td>
                   </tr>
                 ))}
               </tbody>
