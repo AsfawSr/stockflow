@@ -52,7 +52,7 @@ export class CycleCountsService {
         note: input.note ?? null,
         createdById: actorId,
       },
-      select: countSelect,
+      select: { id: true },
     });
     await this.audit.record({
       organizationId,
@@ -62,7 +62,8 @@ export class CycleCountsService {
       entityId: count.id,
       summary: `Opened a cycle count at ${location.name}`,
     });
-    return count;
+    // The same shape as GET so clients can route straight to the session.
+    return this.get(organizationId, count.id);
   }
 
   async list(organizationId: string, query: PageQueryDto) {
