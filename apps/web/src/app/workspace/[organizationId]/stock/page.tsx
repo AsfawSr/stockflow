@@ -164,6 +164,9 @@ export default async function StockPage({
           <Link className="secondary-button" href={`/workspace/${organization.id}/stock/valuation`}>
             Valuation
           </Link>
+          <Link className="secondary-button" href={`/workspace/${organization.id}/stock/counts`}>
+            Cycle counts
+          </Link>
         </div>
       </form>
 
