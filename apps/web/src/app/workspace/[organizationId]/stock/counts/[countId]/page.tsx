@@ -58,6 +58,9 @@ export default async function CycleCountPage({
       timeZone: 'UTC',
     }).format(new Date(date));
   const signed = (value: number) => (value > 0 ? `+${value}` : String(value));
+  const differences = count.lines.filter(
+    (line) => line.countedQuantity !== line.expectedQuantity,
+  ).length;
 
   return (
     <AppShell user={user} organization={organization} section="Stock">
@@ -88,6 +91,9 @@ export default async function CycleCountPage({
           <h2 id="count-heading">Counted products</h2>
           <span>
             {count.lines.length} {count.lines.length === 1 ? 'product' : 'products'}
+            {count.lines.length > 0
+              ? ` \u00b7 ${differences} ${differences === 1 ? 'difference' : 'differences'}`
+              : ''}
           </span>
         </div>
         <p className="muted">
@@ -101,6 +107,20 @@ export default async function CycleCountPage({
             : ''}
           {open ? ' · Differences are posted as adjustments when the count is completed.' : ''}
         </p>
+        {count.status === 'COMPLETED' && (
+          <p className="form-notice" role="status">
+            {differences === 0
+              ? 'Every counted product matched the ledger; nothing was adjusted.'
+              : `${differences} ${
+                  differences === 1 ? 'difference was' : 'differences were'
+                } posted to the ledger as stock adjustments.`}
+          </p>
+        )}
+        {count.status === 'CANCELLED' && (
+          <p className="form-notice" role="status">
+            This session was cancelled; nothing was posted to the ledger.
+          </p>
+        )}
         {count.lines.length === 0 ? (
           <div className="empty-organizations">
             <ClipboardList size={38} strokeWidth={1.3} aria-hidden="true" />
