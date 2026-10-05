@@ -96,6 +96,9 @@ test.afterAll(async () => {
     await database.query('DELETE FROM audit_events WHERE organization_id = ANY($1::uuid[])', [
       ownedIds,
     ]);
+    await database.query('DELETE FROM report_snapshots WHERE organization_id = ANY($1::uuid[])', [
+      ownedIds,
+    ]);
     await database.query('DELETE FROM webhook_deliveries WHERE organization_id = ANY($1::uuid[])', [
       ownedIds,
     ]);
@@ -715,6 +718,35 @@ test('account access, cookie privacy, organization selection, and revoked permis
   ).toBeVisible();
   await checkLayouts(page);
   await page.getByRole('link', { name: 'Back to overview', exact: true }).click();
+  await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
+
+  // A valuation snapshot freezes today's totals for later comparison.
+  await page.getByRole('link', { name: 'Stock', exact: true }).click();
+  await page.getByRole('link', { name: 'Valuation', exact: true }).click();
+  await page.getByRole('button', { name: 'Save snapshot', exact: true }).click();
+  await expect(page.getByText('Snapshot saved at 229.50 ETB.', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Snapshots', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Valuation snapshots', exact: true }),
+  ).toBeVisible();
+  const snapshotRow = page.locator('tbody tr').first();
+  await expect(snapshotRow.getByRole('cell', { name: '229.50 ETB', exact: true })).toBeVisible();
+  await expect(
+    snapshotRow.getByRole('cell', { name: 'Browser Test Operator', exact: true }),
+  ).toBeVisible();
+  await checkLayouts(page);
+  await snapshotRow.getByRole('link', { name: /^Open snapshot from / }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Valuation snapshot', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('Total 229.50 ETB', { exact: true })).toBeVisible();
+  await expect(page.getByText('Saved by Browser Test Operator.', { exact: false })).toBeVisible();
+  const snapshotDetailRow = page.getByRole('row', { name: /USB-C Charger 65W/ });
+  await expect(snapshotDetailRow.getByRole('cell', { name: '9 piece', exact: true })).toBeVisible();
+  await expect(
+    snapshotDetailRow.getByRole('cell', { name: '229.50 ETB', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
 
   // Reorder suggestions surface shortages with the last confirmed supplier and price.
