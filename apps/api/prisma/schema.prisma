@@ -73,6 +73,7 @@ model Organization {
   webhookEndpoints WebhookEndpoint[]
   webhookDeliveries WebhookDelivery[]
   reportSnapshots ReportSnapshot[]
+  supplierCatalogPrices SupplierCatalogPrice[]
 
   @@map("organizations")
 }
@@ -90,6 +91,7 @@ model Supplier {
   updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   purchaseOrders PurchaseOrder[]
+  catalogPrices  SupplierCatalogPrice[]
 
   @@unique([organizationId, name])
   @@unique([organizationId, id])
@@ -136,6 +138,7 @@ model Product {
   stockLevels        StockLevel[]
   stockTransfers     StockTransfer[]
   stockAdjustments   StockAdjustment[]
+  catalogPrices      SupplierCatalogPrice[]
 
   @@unique([organizationId, sku])
   @@unique([organizationId, id])
@@ -462,4 +465,22 @@ model ReportSnapshot {
 
   @@index([organizationId, createdAt(sort: Desc), id])
   @@map("report_snapshots")
+}
+
+model SupplierCatalogPrice {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  supplierId     String       @map("supplier_id") @db.Uuid
+  productId      String       @map("product_id") @db.Uuid
+  unitPrice      Decimal      @map("unit_price") @db.Decimal(12, 2)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  supplier       Supplier     @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, productId])
+  @@index([organizationId])
+  @@index([productId])
+  @@map("supplier_catalog_prices")
 }
