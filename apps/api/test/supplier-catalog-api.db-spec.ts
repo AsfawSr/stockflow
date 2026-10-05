@@ -285,4 +285,43 @@ describe('Supplier catalog API against PostgreSQL', () => {
       await authed('put', entryPath).send({ unitPrice: '6.00' }).expect(423);
     });
   }, 60000);
+
+  it('removes quotes without touching order history', async () => {
+    await withApplication(async (app, database) => {
+      const owner = await registerVerified(app, 'Catalog Owner');
+      const organization = await request(app.getHttpServer())
+        .post('/api/organizations')
+        .set('Authorization', owner.auth)
+        .send({ name: `Catalog ${randomUUID().slice(0, 8)}`, currency: 'USD' })
+        .expect(201);
+      const organizationId = organization.body.id as string;
+      const api = `/api/organizations/${organizationId}`;
+      const authed = (method: 'get' | 'post' | 'put' | 'delete', path: string) =>
+        request(app.getHttpServer())[method](`${api}${path}`).set('Authorization', owner.auth);
+
+      const supplier = await authed('post', '/suppliers').send({ name: 'Removal Supplier' });
+      const supplierId = supplier.body.id as string;
+      const product = await authed('post', '/products').send({
+        sku: 'REMOVE-1',
+        name: 'Removable Widget',
+        unit: 'piece',
+      });
+      const productId = product.body.id as string;
+      const entryPath = `/suppliers/${supplierId}/catalog/${productId}`;
+
+      await authed('put', entryPath).send({ unitPrice: '4.25' }).expect(200);
+      await authed('delete', entryPath).expect(204);
+      expect(
+        (await authed('get', `/suppliers/${supplierId}/catalog`).expect(200)).body.items,
+      ).toEqual([]);
+      await authed('delete', entryPath).expect(404);
+      await authed('delete', `/suppliers/${randomUUID()}/catalog/${productId}`).expect(404);
+
+      const audit = await database.auditEvent.findMany({
+        where: { organizationId, action: 'supplier.price_removed' },
+      });
+      expect(audit).toHaveLength(1);
+      expect(audit[0].summary).toBe('Removed the Removable Widget quote for Removal Supplier');
+    });
+  }, 60000);
 });

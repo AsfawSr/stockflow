@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Header,
   HttpCode,
@@ -75,6 +76,23 @@ export class SuppliersController {
       supplierId,
       productId,
       input.unitPrice,
+    );
+  }
+
+  @Delete(':supplierId/catalog/:productId')
+  @Roles('ADMIN', 'PURCHASER')
+  @HttpCode(204)
+  removeCatalogPrice(
+    @Req() request: AuthenticatedRequest,
+    @Param('organizationId') organizationId: string,
+    @Param('supplierId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) supplierId: string,
+    @Param('productId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) productId: string,
+  ) {
+    return this.suppliers.removeCatalogPrice(
+      request.principal.user.id,
+      organizationId,
+      supplierId,
+      productId,
     );
   }
 

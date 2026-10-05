@@ -142,6 +142,29 @@ export class SuppliersService {
     };
   }
 
+  async removeCatalogPrice(
+    actorId: string,
+    organizationId: string,
+    supplierId: string,
+    productId: string,
+  ) {
+    const supplier = await this.get(organizationId, supplierId);
+    const entry = await this.prisma.supplierCatalogPrice.findFirst({
+      where: { organizationId, supplierId, productId },
+      select: { id: true, product: { select: { name: true } } },
+    });
+    if (!entry) throw new NotFoundException('This product is not in the catalog.');
+    await this.prisma.supplierCatalogPrice.deleteMany({ where: { id: entry.id } });
+    await this.audit.record({
+      organizationId,
+      actorId,
+      action: 'supplier.price_removed',
+      entityType: 'supplier',
+      entityId: supplierId,
+      summary: `Removed the ${entry.product.name} quote for ${supplier.name}`,
+    });
+  }
+
   // Latest confirmed unit price per product, derived from approved order history.
   async prices(organizationId: string, supplierId: string) {
     await this.get(organizationId, supplierId);
