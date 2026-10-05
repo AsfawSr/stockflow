@@ -81,6 +81,12 @@ test.afterAll(async () => {
     await database.query('DELETE FROM purchase_orders WHERE organization_id = ANY($1::uuid[])', [
       ownedIds,
     ]);
+    await database.query('DELETE FROM cycle_count_lines WHERE organization_id = ANY($1::uuid[])', [
+      ownedIds,
+    ]);
+    await database.query('DELETE FROM cycle_counts WHERE organization_id = ANY($1::uuid[])', [
+      ownedIds,
+    ]);
     await database.query('DELETE FROM products WHERE organization_id = ANY($1::uuid[])', [
       ownedIds,
     ]);
@@ -885,6 +891,65 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await expect(
     page.getByRole('heading', { name: 'Latest confirmed prices', exact: true }),
   ).toBeVisible();
+  await page.getByRole('link', { name: 'Overview', exact: true }).click();
+  await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
+
+  // A cycle count reconciles shelf stock and posts the differences as adjustments.
+  await page.getByRole('link', { name: 'Stock', exact: true }).click();
+  await page.getByRole('link', { name: 'Cycle counts', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Cycle counts', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No counts yet', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'New count', exact: true }).click();
+  const countDialog = page.getByRole('dialog', { name: 'New cycle count', exact: true });
+  await countDialog
+    .getByLabel('Location', { exact: true })
+    .selectOption({ label: 'Main Warehouse' });
+  await countDialog.getByLabel('Note (optional)', { exact: true }).fill('Friday sweep');
+  await countDialog.getByRole('button', { name: 'Open count', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Main Warehouse', exact: true })).toBeVisible();
+  await expect(page.getByText('Open', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Nothing counted yet', exact: true }),
+  ).toBeVisible();
+
+  // Mouse pads were never received, so the ledger expects zero.
+  await page
+    .getByLabel('Product', { exact: true })
+    .selectOption({ label: 'MOUSE-PAD \u00b7 Mouse Pad' });
+  await page.getByLabel('Counted quantity', { exact: true }).fill('3');
+  await page.getByRole('button', { name: 'Save count', exact: true }).click();
+  const countRow = page.getByRole('row', { name: /Mouse Pad/ });
+  await expect(countRow.getByRole('cell', { name: '0 piece', exact: true })).toBeVisible();
+  await expect(countRow.getByRole('cell', { name: '3 piece', exact: true })).toBeVisible();
+  await expect(countRow.getByRole('cell', { name: '+3 piece', exact: true })).toBeVisible();
+  await page
+    .getByLabel('Product', { exact: true })
+    .selectOption({ label: 'DESK-LAMP \u00b7 Desk Lamp' });
+  await page.getByLabel('Counted quantity', { exact: true }).fill('0');
+  await page.getByRole('button', { name: 'Save count', exact: true }).click();
+  const lampRow = page.getByRole('row', { name: /Desk Lamp/ });
+  await expect(lampRow.getByRole('cell', { name: 'matches', exact: true })).toBeVisible();
+  await expect(page.getByText('2 products · 1 difference', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Remove DESK-LAMP from the count', exact: true }).click();
+  await expect(page.getByText('1 product · 1 difference', { exact: true })).toBeVisible();
+  await checkLayouts(page);
+
+  await page.getByRole('button', { name: 'Complete count', exact: true }).click();
+  await expect(page.getByText('Completed', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('1 difference was posted to the ledger as stock adjustments.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save count', exact: true })).toHaveCount(0);
+
+  // The posted variance is a real balance now.
+  await page.getByRole('link', { name: 'Stock', exact: true }).click();
+  const countedBalanceRow = page.getByRole('row', { name: /Mouse Pad/ });
+  await expect(countedBalanceRow.getByRole('cell', { name: '3 piece', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Cycle counts', exact: true }).click();
+  const sessionRow = page.getByRole('row', { name: /Main Warehouse/ }).first();
+  await expect(sessionRow.getByRole('cell', { name: 'Completed', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
   await expect(page.getByRole('heading', { name: renamed, exact: true })).toBeVisible();
 

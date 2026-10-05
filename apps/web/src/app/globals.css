@@ -1454,6 +1454,7 @@ dd {
 }
 .catalog-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
@@ -1464,7 +1465,7 @@ dd {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  flex-shrink: 0;
+  min-width: 0;
   font-size: 12px;
   color: var(--muted);
 }
