@@ -76,24 +76,37 @@ export class SuppliersService {
 
   // Quoted prices maintained by hand, independent of order history.
   async catalog(organizationId: string, supplierId: string) {
-    await this.get(organizationId, supplierId);
-    const entries = await this.prisma.supplierCatalogPrice.findMany({
-      where: { organizationId, supplierId },
-      select: {
-        id: true,
-        unitPrice: true,
-        updatedAt: true,
-        product: { select: { id: true, sku: true, name: true, unit: true } },
-      },
-      orderBy: [{ product: { name: 'asc' } }, { id: 'asc' }],
-    });
+    const [entries, confirmed] = await Promise.all([
+      this.prisma.supplierCatalogPrice.findMany({
+        where: { organizationId, supplierId },
+        select: {
+          id: true,
+          unitPrice: true,
+          updatedAt: true,
+          product: { select: { id: true, sku: true, name: true, unit: true } },
+        },
+        orderBy: [{ product: { name: 'asc' } }, { id: 'asc' }],
+      }),
+      this.prices(organizationId, supplierId),
+    ]);
+    const confirmedByProduct = new Map(confirmed.items.map((item) => [item.product.id, item]));
     return {
-      items: entries.map((entry) => ({
-        id: entry.id,
-        product: entry.product,
-        unitPrice: entry.unitPrice.toFixed(2),
-        updatedAt: entry.updatedAt,
-      })),
+      items: entries.map((entry) => {
+        const history = confirmedByProduct.get(entry.product.id);
+        return {
+          id: entry.id,
+          product: entry.product,
+          unitPrice: entry.unitPrice.toFixed(2),
+          updatedAt: entry.updatedAt,
+          lastConfirmed: history
+            ? {
+                unitPrice: history.unitPrice,
+                reference: history.reference,
+                decidedAt: history.decidedAt,
+              }
+            : null,
+        };
+      }),
     };
   }
 

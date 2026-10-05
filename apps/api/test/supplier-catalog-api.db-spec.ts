@@ -183,6 +183,27 @@ describe('Supplier catalog API against PostgreSQL', () => {
       });
       expect(list.body.items[0].updatedAt).toBeTruthy();
 
+      // Confirmed order history appears beside the quote for comparison.
+      expect(list.body.items[0].lastConfirmed).toBeNull();
+      const location = await authed('post', '/locations').send({ name: 'Catalog Warehouse' });
+      const order = await authed('post', '/purchase-orders')
+        .send({ supplierId, locationId: location.body.id })
+        .expect(201);
+      const orderId = order.body.id as string;
+      await authed('post', `/purchase-orders/${orderId}/lines`)
+        .send({ productId: zebra.body.id, quantity: 3, unitPrice: '13.75' })
+        .expect(201);
+      await authed('post', `/purchase-orders/${orderId}/submit`).expect(200);
+      await authed('post', `/purchase-orders/${orderId}/approve`).send({}).expect(200);
+      const compared = await authed('get', `/suppliers/${supplierId}/catalog`).expect(200);
+      expect(compared.body.items[1]).toMatchObject({
+        product: { sku: 'CAT-Z' },
+        unitPrice: '12.50',
+        lastConfirmed: { unitPrice: '13.75', reference: 'PO-0001' },
+      });
+      expect(compared.body.items[1].lastConfirmed.decidedAt).toBeTruthy();
+      expect(compared.body.items[0].lastConfirmed).toBeNull();
+
       await authed('get', `/suppliers/${randomUUID()}/catalog`).expect(404);
       await authed('get', '/suppliers/not-a-uuid/catalog').expect(404);
 
