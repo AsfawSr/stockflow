@@ -155,7 +155,7 @@ describe('Organization archiving against PostgreSQL', () => {
       await request(app.getHttpServer())
         .post(archiveUrl)
         .set('Authorization', owner.auth)
-        .expect(409);
+        .expect(423);
 
       const audit = await request(app.getHttpServer())
         .get(`/api/organizations/${organizationId}/audit`)
@@ -253,16 +253,16 @@ describe('Organization archiving against PostgreSQL', () => {
       await authed('get', '/audit').expect(200);
       await authed('get', '/trends').expect(200);
 
-      // Every mutating route answers 409, including pre-archive invitation links.
+      // Every mutating route answers 423, including pre-archive invitation links.
       await authed('post', '/products')
         .send({ sku: 'FROZEN-2', name: 'Another Widget', unit: 'piece' })
-        .expect(409);
-      await authed('patch', `/products/${product.body.id}`).send({ name: 'Renamed' }).expect(409);
-      await authed('patch', '').send({ name: 'Renamed Org' }).expect(409);
-      await authed('post', '/suppliers').send({ name: 'Blocked Supplier' }).expect(409);
+        .expect(423);
+      await authed('patch', `/products/${product.body.id}`).send({ name: 'Renamed' }).expect(423);
+      await authed('patch', '').send({ name: 'Renamed Org' }).expect(423);
+      await authed('post', '/suppliers').send({ name: 'Blocked Supplier' }).expect(423);
       await authed('post', '/purchase-orders')
         .send({ supplierId: randomUUID(), locationId: randomUUID() })
-        .expect(409);
+        .expect(423);
       await authed('post', '/stock/adjustments')
         .send({
           productId: product.body.id,
@@ -270,15 +270,15 @@ describe('Organization archiving against PostgreSQL', () => {
           quantity: 1,
           reason: 'Blocked',
         })
-        .expect(409);
+        .expect(423);
       await authed('post', '/invitations')
         .send({ email: `${randomUUID()}@example.test`, roles: ['MANAGER'] })
-        .expect(409);
+        .expect(423);
       const blockedAccept = await request(app.getHttpServer())
         .post('/api/invitations/accept')
         .set('Authorization', invitee.auth)
         .send({ token: inviteToken })
-        .expect(409);
+        .expect(423);
       expect(blockedAccept.body.message).toContain('archived');
 
       // Restoring reopens the workspace for writes.

@@ -216,11 +216,11 @@ describe('Webhook API against PostgreSQL', () => {
         .post(api)
         .set('Authorization', owner.auth)
         .send({ url: 'https://example.test/other' })
-        .expect(409);
+        .expect(423);
       await request(app.getHttpServer())
         .delete(`${api}/${created.body.id as string}`)
         .set('Authorization', owner.auth)
-        .expect(409);
+        .expect(423);
       expect(await database.webhookEndpoint.count({ where: { organizationId } })).toBe(1);
     });
   }, 60000);

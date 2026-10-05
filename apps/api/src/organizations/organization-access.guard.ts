@@ -1,9 +1,10 @@
 import {
   BadRequestException,
   CanActivate,
-  ConflictException,
   ExecutionContext,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
   SetMetadata,
@@ -52,7 +53,7 @@ export class OrganizationAccessGuard implements CanActivate {
       context.getClass(),
     ]);
     if (membership.organization.archivedAt && request.method !== 'GET' && !allowArchived) {
-      throw new ConflictException('This organization is archived and read-only.');
+      throw new HttpException('This organization is archived and read-only.', HttpStatus.LOCKED);
     }
     return true;
   }

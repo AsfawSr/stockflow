@@ -2,6 +2,8 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
@@ -141,7 +143,10 @@ export class InvitationsService {
       if (candidate.email !== user.email)
         throw new ForbiddenException('This invitation was issued for a different email address.');
       if (candidate.organization.archivedAt)
-        throw new ConflictException('This organization is archived and not accepting members.');
+        throw new HttpException(
+          'This organization is archived and not accepting members.',
+          HttpStatus.LOCKED,
+        );
       const claimed = await tx.invitation.deleteMany({
         where: { id: candidate.id, expiresAt: { gt: new Date() } },
       });
