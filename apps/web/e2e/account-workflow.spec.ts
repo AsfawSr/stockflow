@@ -872,7 +872,9 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await archivedInvite.getByLabel('Email address', { exact: true }).fill(emails[1]);
   await archivedInvite.getByLabel('Manager', { exact: true }).check();
   await archivedInvite.getByRole('button', { name: 'Send invitation', exact: true }).click();
-  await expect(archivedInvite.getByRole('alert')).toBeVisible();
+  await expect(archivedInvite.getByRole('alert')).toContainText(
+    'This organization is archived and read-only.',
+  );
   await archivedInvite.getByRole('button', { name: 'Close dialog', exact: true }).click();
   await expect(archivedInvite).not.toBeVisible();
   await expect(page.getByRole('heading', { name: 'Pending invitations', exact: true })).toHaveCount(
