@@ -449,6 +449,9 @@ export type SupplierPrice = {
   reference: string;
   decidedAt: string;
 };
+export type LinePriceSuggestion =
+  | { source: 'confirmed'; unitPrice: string; reference: string; decidedAt: string }
+  | { source: 'catalog'; unitPrice: string; updatedAt: string };
 const percentSchema = z.string().regex(/^\d+(\.\d)$/);
 export const supplierPerformanceSchema = z.object({
   confirmedOrders: z.number().int().nonnegative(),

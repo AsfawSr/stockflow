@@ -15,7 +15,9 @@ import {
   organizationIdSchema,
   productListSchema,
   purchaseOrderSchema,
+  supplierCatalogSchema,
   supplierPriceListSchema,
+  type LinePriceSuggestion,
 } from '@/lib/contracts';
 import { authenticatedRequest, requireOrganization, requireUser } from '@/lib/session';
 
@@ -68,19 +70,34 @@ export default async function PurchaseOrderPage({
           supplierPriceListSchema,
         )
       : null;
-  const priceMap =
-    supplierPrices?.ok === true
-      ? Object.fromEntries(
-          supplierPrices.data.items.map((item) => [
-            item.product.id,
-            {
-              unitPrice: item.unitPrice,
-              reference: item.reference,
-              decidedAt: item.decidedAt,
-            },
-          ]),
+  const catalog =
+    purchaser && draft
+      ? await authenticatedRequest(
+          `/organizations/${organization.id}/suppliers/${order.supplier.id}/catalog`,
+          supplierCatalogSchema,
         )
-      : {};
+      : null;
+  // A hand-entered quote beats confirmed history when pre-filling a line.
+  const priceMap: Record<string, LinePriceSuggestion> = {};
+  if (supplierPrices?.ok === true) {
+    for (const item of supplierPrices.data.items) {
+      priceMap[item.product.id] = {
+        source: 'confirmed',
+        unitPrice: item.unitPrice,
+        reference: item.reference,
+        decidedAt: item.decidedAt,
+      };
+    }
+  }
+  if (catalog?.ok === true) {
+    for (const entry of catalog.data.items) {
+      priceMap[entry.product.id] = {
+        source: 'catalog',
+        unitPrice: entry.unitPrice,
+        updatedAt: entry.updatedAt,
+      };
+    }
+  }
 
   const formatDate = (date: string) =>
     new Intl.DateTimeFormat('en-GB', {

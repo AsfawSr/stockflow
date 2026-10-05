@@ -21,7 +21,7 @@ import {
   removeOrderLineAction,
   transitionOrderAction,
 } from '@/app/actions';
-import type { FormState, PurchaseOrder, SupplierPrice } from '@/lib/contracts';
+import type { FormState, LinePriceSuggestion, PurchaseOrder } from '@/lib/contracts';
 import { FieldError, FormFeedback, SubmitButton } from './form-controls';
 
 type Option = { id: string; label: string };
@@ -257,7 +257,7 @@ export function AddLineForm({
   organizationId: string;
   orderId: string;
   products: Option[];
-  prices?: Record<string, SupplierPrice>;
+  prices?: Record<string, LinePriceSuggestion>;
 }) {
   const [formKey, setFormKey] = useState(0);
   return (
@@ -282,7 +282,7 @@ function AddLineFields({
   organizationId: string;
   orderId: string;
   products: Option[];
-  prices: Record<string, SupplierPrice>;
+  prices: Record<string, LinePriceSuggestion>;
   onDone: () => void;
 }) {
   const [state, action] = useActionState(addOrderLineAction, {} as FormState);
@@ -358,8 +358,9 @@ function AddLineFields({
           />
           {lastPrice && (
             <p id="line-price-hint" className="field-hint">
-              Last confirmed: {lastPrice.unitPrice} ({lastPrice.reference},{' '}
-              {formatDate(lastPrice.decidedAt)})
+              {lastPrice.source === 'catalog'
+                ? `Catalog quote: ${lastPrice.unitPrice} (updated ${formatDate(lastPrice.updatedAt)})`
+                : `Last confirmed: ${lastPrice.unitPrice} (${lastPrice.reference}, ${formatDate(lastPrice.decidedAt)})`}
             </p>
           )}
           <FieldError name="unitPrice" state={state} />

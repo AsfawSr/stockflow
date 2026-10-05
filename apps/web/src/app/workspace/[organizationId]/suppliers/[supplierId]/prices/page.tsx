@@ -2,8 +2,10 @@ import { ArrowLeft, BookOpen, ReceiptText } from 'lucide-react';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
+import { AddQuoteButton, RemoveQuoteButton } from '@/components/catalog-forms';
 import {
   organizationIdSchema,
+  productListSchema,
   supplierCatalogSchema,
   supplierPerformanceSchema,
   supplierPriceListSchema,
@@ -22,6 +24,7 @@ export default async function SupplierPricesPage({
   const user = await requireUser();
   const organization = await requireOrganization(organizationId);
   if (!organizationIdSchema.safeParse(supplierId).success) notFound();
+  const canQuote = organization.roles.some((role) => role === 'ADMIN' || role === 'PURCHASER');
 
   const [supplier, prices, performance, catalog] = await Promise.all([
     authenticatedRequest(
@@ -58,6 +61,13 @@ export default async function SupplierPricesPage({
       redirect('/login?notice=expired');
     throw new Error('The StockFlow API is unavailable.');
   }
+  const products =
+    canQuote && !supplier.data.archivedAt
+      ? await authenticatedRequest(
+          `/organizations/${organization.id}/products?status=active&pageSize=100`,
+          productListSchema,
+        )
+      : null;
   const metrics = performance.data;
   const formatDate = (date: string) =>
     new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeZone: 'UTC' }).format(
@@ -159,9 +169,21 @@ export default async function SupplierPricesPage({
       <section className="workspace-section" aria-labelledby="catalog-heading">
         <div className="section-heading">
           <h2 id="catalog-heading">Catalog quotes</h2>
-          <span>
-            {catalog.data.items.length} {catalog.data.items.length === 1 ? 'product' : 'products'}
-          </span>
+          <div className="section-heading-actions">
+            <span>
+              {catalog.data.items.length} {catalog.data.items.length === 1 ? 'product' : 'products'}
+            </span>
+            {products?.ok === true && (
+              <AddQuoteButton
+                organizationId={organization.id}
+                supplierId={supplierId}
+                products={products.data.items.map((product) => ({
+                  id: product.id,
+                  label: `${product.sku} \u00b7 ${product.name}`,
+                }))}
+              />
+            )}
+          </div>
         </div>
         <p className="muted">
           Quoted prices entered by hand, independent of order history. The difference shows how the
@@ -184,6 +206,11 @@ export default async function SupplierPricesPage({
                   <th scope="col">LAST CONFIRMED</th>
                   <th scope="col">DIFFERENCE</th>
                   <th scope="col">UPDATED</th>
+                  {canQuote && (
+                    <th scope="col">
+                      <span className="visually-hidden">Actions</span>
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -207,6 +234,16 @@ export default async function SupplierPricesPage({
                         : '\u2014'}
                     </td>
                     <td>{formatDate(entry.updatedAt)}</td>
+                    {canQuote && (
+                      <td>
+                        <RemoveQuoteButton
+                          organizationId={organization.id}
+                          supplierId={supplierId}
+                          productId={entry.product.id}
+                          label={entry.product.sku}
+                        />
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
