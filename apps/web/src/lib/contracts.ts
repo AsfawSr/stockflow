@@ -498,6 +498,29 @@ export const stockValuationSchema = z.object({
   ),
   totalValue: moneySchema,
 });
+const snapshotActorSchema = z.object({ id: z.uuid(), displayName: z.string().min(1) }).nullable();
+export const valuationSnapshotSchema = z.object({
+  id: z.uuid(),
+  type: z.literal('valuation'),
+  payload: stockValuationSchema.extend({ currency: z.string().regex(/^[A-Z]{3}$/) }),
+  createdAt: z.iso.datetime(),
+  createdBy: snapshotActorSchema,
+});
+export const valuationSnapshotListSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.uuid(),
+      createdAt: z.iso.datetime(),
+      createdBy: snapshotActorSchema,
+      currency: z.string().regex(/^[A-Z]{3}$/),
+      totalValue: moneySchema,
+      productCount: z.number().int().nonnegative(),
+    }),
+  ),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
 export const stockMovementListSchema = z.object({
   items: z.array(
     z.object({

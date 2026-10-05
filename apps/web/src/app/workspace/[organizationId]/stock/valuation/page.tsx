@@ -1,7 +1,8 @@
-import { ArrowLeft, Banknote } from 'lucide-react';
+import { ArrowLeft, Banknote, History } from 'lucide-react';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
+import { SaveSnapshotButton } from '@/components/snapshot-forms';
 import { stockValuationSchema } from '@/lib/contracts';
 import { authenticatedRequest, requireOrganization, requireUser } from '@/lib/session';
 
@@ -15,6 +16,8 @@ export default async function StockValuationPage({
   const { organizationId } = await params;
   const user = await requireUser();
   const organization = await requireOrganization(organizationId);
+  const canSnapshot =
+    organization.roles.includes('ADMIN') || organization.roles.includes('MANAGER');
 
   const result = await authenticatedRequest(
     `/organizations/${organization.id}/stock/valuation`,
@@ -36,6 +39,16 @@ export default async function StockValuationPage({
         <div>
           <p className="eyebrow">INVENTORY</p>
           <h1>Inventory valuation</h1>
+        </div>
+        <div className="button-row">
+          <Link
+            className="secondary-button"
+            href={`/workspace/${organization.id}/stock/valuation/snapshots`}
+          >
+            <History size={16} aria-hidden="true" />
+            Snapshots
+          </Link>
+          {canSnapshot && <SaveSnapshotButton organizationId={organization.id} />}
         </div>
       </div>
       <section className="workspace-section" aria-labelledby="valuation-heading">

@@ -37,6 +37,7 @@ import {
   supplierInputSchema,
   supplierSchema,
   createdWebhookSchema,
+  valuationSnapshotSchema,
   webhookSchema,
   webhookUrlInputSchema,
   type FormState,
@@ -937,4 +938,23 @@ export async function deleteWebhookAction(
   if (!result.ok && result.status !== 404) return { error: result.error };
   revalidatePath(`/workspace/${organizationId.data}/webhooks`);
   return { success: 'Webhook deleted.' };
+}
+
+export async function saveValuationSnapshotAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  if (!organizationId.success) return { error: 'Choose a valid organization.' };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/reports/valuation/snapshots`,
+    valuationSnapshotSchema,
+    { method: 'POST' },
+  );
+  if (!result.ok) return { error: result.error };
+  revalidatePath(`/workspace/${organizationId.data}/stock/valuation`);
+  revalidatePath(`/workspace/${organizationId.data}/stock/valuation/snapshots`);
+  return {
+    success: `Snapshot saved at ${result.data.payload.totalValue} ${result.data.payload.currency}.`,
+  };
 }

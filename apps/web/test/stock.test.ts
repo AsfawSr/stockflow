@@ -10,6 +10,8 @@ import {
   stockValuationSchema,
   transferInputSchema,
   trendListSchema,
+  valuationSnapshotListSchema,
+  valuationSnapshotSchema,
 } from '../src/lib/contracts';
 
 const uuid = '8ed13b94-fd8b-4079-848e-f22edaa8ce05';
@@ -50,6 +52,59 @@ test('validates valuation reports with nullable costs', () => {
     false,
   );
   assert.equal(stockValuationSchema.safeParse({ items: [item] }).success, false);
+});
+
+test('validates frozen valuation snapshots and their history list', () => {
+  const snapshot = {
+    id: uuid,
+    type: 'valuation',
+    payload: {
+      currency: 'ETB',
+      totalValue: '46.80',
+      items: [
+        {
+          product: { id: uuid, sku: 'CHARGER-65', name: 'USB-C Charger', unit: 'piece' },
+          onHand: 9,
+          averageCost: '5.20',
+          value: '46.80',
+        },
+      ],
+    },
+    createdAt: new Date().toISOString(),
+    createdBy: { id: otherUuid, displayName: 'Snapshot Manager' },
+  };
+  assert.equal(valuationSnapshotSchema.safeParse(snapshot).success, true);
+  assert.equal(valuationSnapshotSchema.safeParse({ ...snapshot, createdBy: null }).success, true);
+  assert.equal(valuationSnapshotSchema.safeParse({ ...snapshot, type: 'profit' }).success, false);
+  assert.equal(
+    valuationSnapshotSchema.safeParse({
+      ...snapshot,
+      payload: { ...snapshot.payload, currency: 'birr' },
+    }).success,
+    false,
+  );
+  const row = {
+    id: uuid,
+    createdAt: new Date().toISOString(),
+    createdBy: null,
+    currency: 'ETB',
+    totalValue: '46.80',
+    productCount: 1,
+  };
+  assert.equal(
+    valuationSnapshotListSchema.safeParse({ items: [row], total: 1, page: 1, pageSize: 20 })
+      .success,
+    true,
+  );
+  assert.equal(
+    valuationSnapshotListSchema.safeParse({
+      items: [{ ...row, productCount: -1 }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }).success,
+    false,
+  );
 });
 
 test('validates transfer input', () => {
