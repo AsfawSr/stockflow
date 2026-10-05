@@ -416,6 +416,28 @@ export const supplierPriceListSchema = z.object({
     }),
   ),
 });
+export const supplierCatalogSchema = z.object({
+  items: z.array(
+    z.object({
+      id: z.uuid(),
+      product: orderProductSchema,
+      unitPrice: moneySchema,
+      updatedAt: z.iso.datetime(),
+      lastConfirmed: z
+        .object({
+          unitPrice: moneySchema,
+          reference: z.string().min(1),
+          decidedAt: z.iso.datetime(),
+        })
+        .nullable(),
+    }),
+  ),
+});
+export const catalogPriceInputSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{1,10}(\.\d{1,2})?$/, 'Enter a price such as 25 or 25.50.')
+  .refine((value) => Number(value) > 0, 'Enter a price above zero.');
 export type SupplierPrice = {
   unitPrice: string;
   reference: string;
@@ -440,6 +462,7 @@ export const reorderSuggestionListSchema = z.object({
       supplier: orderPartySchema.nullable(),
       unitPrice: moneySchema.nullable(),
       reference: z.string().min(1).nullable(),
+      source: z.enum(['confirmed', 'catalog']).nullable(),
     }),
   ),
 });

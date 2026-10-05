@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  catalogPriceInputSchema,
   createOrderInputSchema,
   orderFromSuggestionInputSchema,
   orderLineInputSchema,
@@ -10,6 +11,7 @@ import {
   purchaseOrderSchema,
   rejectInputSchema,
   reorderSuggestionListSchema,
+  supplierCatalogSchema,
   supplierPriceListSchema,
 } from '../src/lib/contracts';
 
@@ -34,6 +36,38 @@ test('validates supplier price lists with strict money strings', () => {
   );
 });
 
+test('validates supplier catalogs with optional confirmed history', () => {
+  const entry = {
+    id: uuid,
+    product: { id: uuid, sku: 'CHARGER-65', name: 'USB-C Charger', unit: 'piece' },
+    unitPrice: '11.00',
+    updatedAt: new Date().toISOString(),
+    lastConfirmed: {
+      unitPrice: '12.50',
+      reference: 'PO-0002',
+      decidedAt: new Date().toISOString(),
+    },
+  };
+  assert.equal(supplierCatalogSchema.safeParse({ items: [entry] }).success, true);
+  assert.equal(
+    supplierCatalogSchema.safeParse({ items: [{ ...entry, lastConfirmed: null }] }).success,
+    true,
+  );
+  assert.equal(
+    supplierCatalogSchema.safeParse({ items: [{ ...entry, unitPrice: '11.5' }] }).success,
+    false,
+  );
+  assert.equal(
+    supplierCatalogSchema.safeParse({ items: [{ ...entry, lastConfirmed: undefined }] }).success,
+    false,
+  );
+  assert.equal(catalogPriceInputSchema.parse(' 12.50 '), '12.50');
+  assert.equal(catalogPriceInputSchema.parse('25'), '25');
+  for (const invalid of ['', 'abc', '-5', '0', '0.00', '5,50']) {
+    assert.equal(catalogPriceInputSchema.safeParse(invalid).success, false);
+  }
+});
+
 test('validates reorder suggestion lists with nullable sourcing', () => {
   const item = {
     product: { id: uuid, sku: 'CHARGER-65', name: 'USB-C Charger', unit: 'piece' },
@@ -43,13 +77,28 @@ test('validates reorder suggestion lists with nullable sourcing', () => {
     supplier: { id: uuid, name: 'Nile Electronics' },
     unitPrice: '25.50',
     reference: 'PO-0001',
+    source: 'confirmed',
   };
   assert.equal(reorderSuggestionListSchema.safeParse({ items: [item] }).success, true);
   assert.equal(
     reorderSuggestionListSchema.safeParse({
-      items: [{ ...item, supplier: null, unitPrice: null, reference: null }],
+      items: [{ ...item, supplier: null, unitPrice: null, reference: null, source: null }],
     }).success,
     true,
+  );
+  assert.equal(
+    reorderSuggestionListSchema.safeParse({
+      items: [{ ...item, reference: null, source: 'catalog' }],
+    }).success,
+    true,
+  );
+  assert.equal(
+    reorderSuggestionListSchema.safeParse({ items: [{ ...item, source: 'guess' }] }).success,
+    false,
+  );
+  assert.equal(
+    reorderSuggestionListSchema.safeParse({ items: [{ ...item, source: undefined }] }).success,
+    false,
   );
   assert.equal(reorderSuggestionListSchema.safeParse({ items: [] }).success, true);
   assert.equal(
