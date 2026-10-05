@@ -54,6 +54,14 @@ enum WebhookDeliveryStatus {
   @@map("webhook_delivery_status")
 }
 
+enum CycleCountStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
+
+  @@map("cycle_count_status")
+}
+
 model Organization {
   id          String       @id @default(uuid()) @db.Uuid
   name        String       @db.VarChar(160)
@@ -74,6 +82,8 @@ model Organization {
   webhookDeliveries WebhookDelivery[]
   reportSnapshots ReportSnapshot[]
   supplierCatalogPrices SupplierCatalogPrice[]
+  cycleCounts CycleCount[]
+  cycleCountLines CycleCountLine[]
 
   @@map("organizations")
 }
@@ -114,6 +124,7 @@ model Location {
   transfersFrom  StockTransfer[] @relation("TransferFrom")
   transfersTo    StockTransfer[] @relation("TransferTo")
   stockAdjustments StockAdjustment[]
+  cycleCounts    CycleCount[]
 
   @@unique([organizationId, name])
   @@unique([organizationId, id])
@@ -139,6 +150,7 @@ model Product {
   stockTransfers     StockTransfer[]
   stockAdjustments   StockAdjustment[]
   catalogPrices      SupplierCatalogPrice[]
+  cycleCountLines    CycleCountLine[]
 
   @@unique([organizationId, sku])
   @@unique([organizationId, id])
@@ -316,6 +328,8 @@ model User {
   sentInvitations Invitation[] @relation("InvitationInvitedBy")
   auditEvents AuditEvent[] @relation("AuditEventActor")
   reportSnapshots ReportSnapshot[] @relation("ReportSnapshotCreatedBy")
+  openedCycleCounts CycleCount[] @relation("CycleCountCreatedBy")
+  completedCycleCounts CycleCount[] @relation("CycleCountCompletedBy")
 
   @@map("users")
 }
@@ -483,4 +497,43 @@ model SupplierCatalogPrice {
   @@index([organizationId])
   @@index([productId])
   @@map("supplier_catalog_prices")
+}
+
+model CycleCount {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  locationId     String           @map("location_id") @db.Uuid
+  status         CycleCountStatus @default(OPEN)
+  note           String?          @db.VarChar(500)
+  createdById    String?          @map("created_by") @db.Uuid
+  completedById  String?          @map("completed_by") @db.Uuid
+  completedAt    DateTime?        @map("completed_at") @db.Timestamptz(3)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  location       Location         @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  createdBy      User?            @relation("CycleCountCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  completedBy    User?            @relation("CycleCountCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+  lines          CycleCountLine[]
+
+  @@index([organizationId, createdAt(sort: Desc), id])
+  @@map("cycle_counts")
+}
+
+model CycleCountLine {
+  id               String       @id @default(uuid()) @db.Uuid
+  cycleCountId     String       @map("cycle_count_id") @db.Uuid
+  organizationId   String       @map("organization_id") @db.Uuid
+  productId        String       @map("product_id") @db.Uuid
+  expectedQuantity Int          @map("expected_quantity")
+  countedQuantity  Int          @map("counted_quantity")
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  cycleCount       CycleCount   @relation(fields: [cycleCountId], references: [id], onDelete: Cascade)
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  product          Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([cycleCountId, productId])
+  @@index([organizationId])
+  @@map("cycle_count_lines")
 }
