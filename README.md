@@ -388,12 +388,13 @@ Organizations can stream purchase order events to external systems.
 Administrators manage endpoints from a workspace settings screen or the API;
 other members get 403, outsiders 404.
 
-| Method | Path                                                 | Behavior                                                                   |
-| ------ | ---------------------------------------------------- | -------------------------------------------------------------------------- |
-| GET    | `/organizations/:organizationId/webhooks`            | List endpoints without secrets.                                            |
-| POST   | `/organizations/:organizationId/webhooks`            | Create an endpoint from an `http(s)` URL; returns the signing secret once. |
-| PATCH  | `/organizations/:organizationId/webhooks/:webhookId` | Enable or disable deliveries with `{ active }`.                            |
-| DELETE | `/organizations/:organizationId/webhooks/:webhookId` | Remove the endpoint; returns 204.                                          |
+| Method | Path                                                            | Behavior                                                                   |
+| ------ | --------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| GET    | `/organizations/:organizationId/webhooks`                       | List endpoints without secrets.                                            |
+| POST   | `/organizations/:organizationId/webhooks`                       | Create an endpoint from an `http(s)` URL; returns the signing secret once. |
+| PATCH  | `/organizations/:organizationId/webhooks/:webhookId`            | Enable or disable deliveries with `{ active }`.                            |
+| DELETE | `/organizations/:organizationId/webhooks/:webhookId`            | Remove the endpoint and its delivery log; returns 204.                     |
+| GET    | `/organizations/:organizationId/webhooks/:webhookId/deliveries` | Page through the endpoint's delivery log, newest first.                    |
 
 The signing secret is 64 hex characters generated server-side on creation and
 returned only in that response; list and update responses never include it.
@@ -423,10 +424,41 @@ keyed with the endpoint secret. Receivers should recompute the HMAC over the
 exact bytes received and compare with a constant-time check. Deliveries use a
 five-second timeout, never follow redirects, and are best effort: an
 unreachable receiver or non-2xx answer logs a warning and never blocks or
-rolls back the order change, and there is no retry queue. Disabled endpoints
-are skipped. Integration tests verify the signature against a live local HTTP
-receiver, that disabled endpoints receive nothing, and that an unreachable
-endpoint does not block receiving an order.
+rolls back the order change. Disabled endpoints are skipped.
+
+Every attempt is recorded in a per-endpoint delivery log with its status
+(`PENDING`, `SUCCEEDED`, or `FAILED`), attempt count, response status, and
+last error. Failed attempts are retried by a background sweep with backoff
+(one minute, then five, fifteen, and sixty) re-sending the exact original
+signed body, for at most five attempts before the delivery is marked
+`FAILED`. Retries pause while an endpoint is disabled and resume when it is
+re-enabled; deleting an endpoint removes its log. The sweep claims each row
+before sending so parallel API instances never double-deliver, and its
+interval is configurable with `WEBHOOK_RETRY_INTERVAL_MS` (default one
+minute). Administrators browse the log per endpoint from the webhooks screen.
+Integration tests verify the signature against a live local HTTP receiver,
+the queue-retry-recover path, the terminal failure path, that disabled
+endpoints receive nothing, and that an unreachable endpoint does not block
+receiving an order.
+
+## Report Snapshots
+
+Valuation reports can be frozen into immutable snapshots for later
+comparison. A snapshot recomputes the weighted-average valuation server-side
+at save time and stores the full report (currency, per-product rows, and the
+total) as a JSON payload that never changes afterwards, even as the ledger
+moves on. Administrators and managers create snapshots; every member can read
+the history, which survives the deletion of the creator's account. Each save
+is recorded in the audit log as `report.snapshot_created`.
+
+| Method | Path                                                                     | Behavior                                            |
+| ------ | ------------------------------------------------------------------------ | --------------------------------------------------- |
+| POST   | `/organizations/:organizationId/reports/valuation/snapshots`             | Freeze the current valuation; `ADMIN` or `MANAGER`. |
+| GET    | `/organizations/:organizationId/reports/valuation/snapshots`             | Page through snapshot summaries, newest first.      |
+| GET    | `/organizations/:organizationId/reports/valuation/snapshots/:snapshotId` | Return one snapshot with its full frozen payload.   |
+
+The web valuation report gains a Save snapshot button and a history screen
+that lists saved totals and opens each frozen report read-only.
 
 ## Authentication API
 
@@ -662,14 +694,16 @@ security is not configured in this milestone.
 Administrators can archive an organization instead of deleting it. Archiving sets
 an `archived_at` timestamp; nothing is removed. While archived, the shared access
 guard rejects every non-read request under `/organizations/:organizationId` with
-409 for all members, administrators included — the only exception is the restore
-endpoint itself. Reads keep working unchanged: every screen, report, audit page,
-and CSV export stays available, so an archived workspace remains a browsable
-record. Pending invitations can no longer be accepted (the accept endpoint
-answers 409), archived organizations are excluded from the low-stock digest
-sweep, and archiving and restoring are both recorded in the audit log. The web
-overview shows a read-only banner, hides the profile form, and offers a restore
-button while archived; archiving requires a confirmation dialog.
+423 Locked for all members, administrators included — the only exception is the
+restore endpoint itself. Reads keep working unchanged: every screen, report,
+audit page, and CSV export stays available, so an archived workspace remains a
+browsable record. Pending invitations can no longer be accepted (the accept
+endpoint answers 423), archived organizations are excluded from the low-stock
+digest sweep, and archiving and restoring are both recorded in the audit log.
+The web maps 423 to a single clear message — "This organization is archived and
+read-only." — in every form, shows a read-only banner on the overview, hides
+the profile form, and offers a restore button while archived; archiving
+requires a confirmation dialog.
 
 ## Local Development
 
@@ -922,8 +956,13 @@ for multi-instance deployments. Milestone 25 hardens the organization lifecycle
 and opens the platform to integrations: administrators archive organizations
 into an audited read-only state (and restore them), while order webhooks stream
 signed purchase order events to admin-managed endpoints with a reveal-once
-secret and a settings screen. Possible next steps: webhook delivery logs with
-retries, or saved report snapshots.
+secret and a settings screen. Milestone 26 makes the platform operable at a
+glance: archived organizations now answer with 423 Locked and one consistent
+read-only message end to end, every webhook attempt lands in a per-endpoint
+delivery log with automatic backoff retries and an admin screen, and valuation
+reports can be frozen into immutable, audited snapshots with a browsable
+history. Possible next steps: supplier catalog price lists, cycle-count
+sessions for the warehouse, or organization data export.
 
 ## Commit Workflow
 
