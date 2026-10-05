@@ -189,6 +189,32 @@ screen shows these metrics above the price list. Tests cover the empty state,
 partial deliveries, completed orders with a backdated approval for a measurable
 lead time, dilution by undelivered orders, and the usual access rules.
 
+### Supplier Catalog
+
+Beside derived order history, each supplier carries a hand-maintained catalog
+of quoted prices — one row per supplier and product, enforced by a unique
+constraint, with prices strictly above zero. Any member reads the catalog;
+`ADMIN` or `PURCHASER` roles manage it, and every change lands in the audit
+log (`supplier.price_set`, `supplier.price_removed`).
+
+| Method | Path                                           | Behavior                                                                   |
+| ------ | ---------------------------------------------- | -------------------------------------------------------------------------- |
+| GET    | `.../suppliers/:supplierId/catalog`            | Quotes by product name, each with the last confirmed price for comparison. |
+| PUT    | `.../suppliers/:supplierId/catalog/:productId` | Upsert a quote with `{ unitPrice }`; archived products answer 409.         |
+| DELETE | `.../suppliers/:supplierId/catalog/:productId` | Remove the quote; returns 204.                                             |
+
+Quotes feed the purchasing flow in two places. When adding a draft order line,
+the price field pre-fills from the supplier's quote first and falls back to the
+last confirmed price, with a hint naming the source. Reorder suggestions use
+confirmed order history when it exists; otherwise the cheapest quote from an
+active supplier fills in the supplier and price, marked with a
+`source: 'catalog'` field and shown as “catalog quote” on the suggestions
+screen. Deleting a supplier or product removes its quotes with it, and the
+supplier prices screen shows quotes beside confirmed history with the price
+difference. Tests cover constraints, role and tenant guards, requoting,
+archived-product and archived-organization rejections, comparison values,
+fallback precedence, and the pre-filled draft flow.
+
 ## Purchase Order and Stock Ledger Model
 
 The sixth migration adds the procurement workflow and the beginning of the stock
@@ -961,8 +987,12 @@ glance: archived organizations now answer with 423 Locked and one consistent
 read-only message end to end, every webhook attempt lands in a per-endpoint
 delivery log with automatic backoff retries and an admin screen, and valuation
 reports can be frozen into immutable, audited snapshots with a browsable
-history. Possible next steps: supplier catalog price lists, cycle-count
-sessions for the warehouse, or organization data export.
+history. Milestone 27 adds supplier catalogs: hand-maintained quoted prices per
+supplier and product that sit beside confirmed order history with their
+difference, pre-fill draft order lines ahead of history, and source reorder
+suggestions for products that have never been ordered. Possible next steps:
+cycle-count sessions for the warehouse, organization data export, or
+multi-currency purchase orders.
 
 ## Commit Workflow
 
