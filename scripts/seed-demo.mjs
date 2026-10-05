@@ -132,6 +132,18 @@ async function main() {
     locations[location.name] = (await call('POST', `${org}/locations`, location)).id;
   }
 
+  // Catalog quotes: some beat confirmed history, one covers a product with no history.
+  for (const [supplier, sku, unitPrice] of [
+    ['Nile Electronics', 'USB-C-65W', '24.00'],
+    ['Nile Electronics', 'HDMI-2M', '5.10'],
+    ['Addis Components', 'SSD-1TB', '89.50'],
+    ['Red Sea Imports', 'PSU-650', '55.00'],
+  ]) {
+    await call('PUT', `${org}/suppliers/${suppliers[supplier]}/catalog/${products[sku]}`, {
+      unitPrice,
+    });
+  }
+
   const base = `${org}/purchase-orders`;
   const act = (id, transition, body) => call('POST', `${base}/${id}/${transition}`, body ?? {});
 
