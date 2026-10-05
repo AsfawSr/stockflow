@@ -812,7 +812,9 @@ export async function acceptInvitationAction(
             ? 'This invitation was issued for a different email address. Sign in with the invited email.'
             : result.status === 409
               ? 'You are already a member of this organization.'
-              : result.error,
+              : result.status === 423
+                ? 'This organization is archived and not accepting new members.'
+                : result.error,
     };
   await rememberOrganization(result.data.id);
   revalidatePath('/organizations');
@@ -892,11 +894,7 @@ export async function createWebhookAction(
     createdWebhookSchema,
     { method: 'POST', body: { url: url.data } },
   );
-  if (!result.ok)
-    return {
-      error: result.status === 409 ? 'This organization is archived and read-only.' : result.error,
-      values,
-    };
+  if (!result.ok) return { error: result.error, values };
   revalidatePath(`/workspace/${organizationId.data}/webhooks`);
   return {
     success: 'Webhook added. Copy the signing secret now; it is shown only once.',
@@ -918,10 +916,7 @@ export async function updateWebhookAction(
     webhookSchema,
     { method: 'PATCH', body: { active } },
   );
-  if (!result.ok)
-    return {
-      error: result.status === 409 ? 'This organization is archived and read-only.' : result.error,
-    };
+  if (!result.ok) return { error: result.error };
   revalidatePath(`/workspace/${organizationId.data}/webhooks`);
   return { success: active ? 'Webhook enabled.' : 'Webhook disabled.' };
 }
@@ -939,10 +934,7 @@ export async function deleteWebhookAction(
     emptySchema,
     { method: 'DELETE' },
   );
-  if (!result.ok && result.status !== 404)
-    return {
-      error: result.status === 409 ? 'This organization is archived and read-only.' : result.error,
-    };
+  if (!result.ok && result.status !== 404) return { error: result.error };
   revalidatePath(`/workspace/${organizationId.data}/webhooks`);
   return { success: 'Webhook deleted.' };
 }

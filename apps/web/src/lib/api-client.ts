@@ -9,6 +9,7 @@ function errorMessage(status: number): string {
   if (status === 403) return 'You do not have permission for this action.';
   if (status === 404) return 'This organization is no longer available to you.';
   if (status === 409) return 'An account could not be created with these details.';
+  if (status === 423) return 'This organization is archived and read-only.';
   if (status === 429) return 'Too many attempts. Wait a minute and try again.';
   return 'StockFlow is temporarily unavailable. Please try again.';
 }

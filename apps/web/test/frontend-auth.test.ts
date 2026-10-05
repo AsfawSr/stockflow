@@ -106,6 +106,18 @@ test('does not expose upstream error contents', async (context) => {
   assert.ok(!JSON.stringify(result).includes('private'));
 });
 
+test('explains locked archived organizations without leaking the upstream body', async (context) => {
+  context.mock.method(globalThis, 'fetch', async () =>
+    Response.json({ message: 'internal guard details' }, { status: 423 }),
+  );
+  const result = await apiRequest('/organizations/any/webhooks', userSchema, { method: 'POST' });
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.status, 423);
+    assert.equal(result.error, 'This organization is archived and read-only.');
+  }
+});
+
 test('handles service outages without treating them as signed-out sessions', async (context) => {
   context.mock.method(globalThis, 'fetch', async () => {
     throw new TypeError('connection failed');
