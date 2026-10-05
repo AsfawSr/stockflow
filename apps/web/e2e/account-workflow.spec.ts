@@ -96,6 +96,9 @@ test.afterAll(async () => {
     await database.query('DELETE FROM audit_events WHERE organization_id = ANY($1::uuid[])', [
       ownedIds,
     ]);
+    await database.query('DELETE FROM webhook_deliveries WHERE organization_id = ANY($1::uuid[])', [
+      ownedIds,
+    ]);
     await database.query('DELETE FROM webhook_endpoints WHERE organization_id = ANY($1::uuid[])', [
       ownedIds,
     ]);
@@ -848,6 +851,14 @@ test('account access, cookie privacy, organization selection, and revoked permis
   await expect(page.getByText('Disabled', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: `Enable ${webhookUrl}`, exact: true }).click();
   await expect(page.getByText('Active', { exact: true })).toBeVisible();
+  // The delivery log starts empty and explains the retry policy.
+  await page.getByRole('link', { name: `Deliveries for ${webhookUrl}`, exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Deliveries', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: webhookUrl, exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No deliveries yet', exact: true })).toBeVisible();
+  await checkLayouts(page);
+  await page.getByRole('link', { name: 'Back to webhooks', exact: true }).click();
+  await expect(page.getByRole('cell', { name: webhookUrl, exact: true })).toBeVisible();
   await page.getByRole('button', { name: `Delete ${webhookUrl}`, exact: true }).click();
   await expect(page.getByRole('heading', { name: 'No webhooks yet', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Back to overview', exact: true }).click();

@@ -87,6 +87,31 @@ export const webhookSchema = z.object({
 });
 export const createdWebhookSchema = webhookSchema.extend({ secret: z.string().min(1).max(128) });
 export const webhookListSchema = z.object({ items: z.array(webhookSchema) });
+export const webhookDeliveryStatuses = ['PENDING', 'SUCCEEDED', 'FAILED'] as const;
+export const webhookDeliveryTone: Record<
+  (typeof webhookDeliveryStatuses)[number],
+  'online' | 'offline' | 'pending'
+> = { PENDING: 'pending', SUCCEEDED: 'online', FAILED: 'offline' };
+export const webhookDeliveryListSchema = z.object({
+  url: z.string().min(1).max(2048),
+  items: z.array(
+    z.object({
+      id: z.uuid(),
+      event: z.string().min(1),
+      body: z.string().min(1),
+      status: z.enum(webhookDeliveryStatuses),
+      attempts: z.number().int().nonnegative(),
+      responseStatus: z.number().int().nullable(),
+      lastError: z.string().nullable(),
+      nextAttemptAt: z.iso.datetime().nullable(),
+      createdAt: z.iso.datetime(),
+      updatedAt: z.iso.datetime(),
+    }),
+  ),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
 export const webhookUrlInputSchema = z
   .string()
   .trim()

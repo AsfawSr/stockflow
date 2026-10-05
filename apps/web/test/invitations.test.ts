@@ -12,6 +12,8 @@ import {
   membershipSchema,
   replyToEmailInputSchema,
   createdWebhookSchema,
+  webhookDeliveryListSchema,
+  webhookDeliveryTone,
   webhookListSchema,
   webhookUrlInputSchema,
 } from '../src/lib/contracts';
@@ -61,6 +63,47 @@ test('validates webhook endpoints and reveals the secret only on creation', () =
   assert.equal(webhookUrlInputSchema.safeParse('ftp://example.test/hooks').success, false);
   assert.equal(webhookUrlInputSchema.safeParse('https://example.test/with space').success, false);
   assert.equal(webhookUrlInputSchema.safeParse('').success, false);
+});
+
+test('validates paginated webhook delivery logs with a tone for every status', () => {
+  const delivery = {
+    id: uuid,
+    event: 'order.approved',
+    body: '{"event":"order.approved"}',
+    status: 'PENDING',
+    attempts: 2,
+    responseStatus: null,
+    lastError: 'HTTP 500',
+    nextAttemptAt: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  const list = {
+    url: 'https://example.test/hooks',
+    items: [delivery],
+    total: 1,
+    page: 1,
+    pageSize: 20,
+  };
+  assert.equal(webhookDeliveryListSchema.safeParse(list).success, true);
+  assert.equal(
+    webhookDeliveryListSchema.safeParse({
+      ...list,
+      items: [{ ...delivery, status: 'SUCCEEDED', responseStatus: 200, lastError: null }],
+    }).success,
+    true,
+  );
+  assert.equal(
+    webhookDeliveryListSchema.safeParse({ ...list, items: [{ ...delivery, status: 'RETRYING' }] })
+      .success,
+    false,
+  );
+  assert.equal(
+    webhookDeliveryListSchema.safeParse({ ...list, items: [{ ...delivery, attempts: -1 }] })
+      .success,
+    false,
+  );
+  assert.deepEqual(Object.keys(webhookDeliveryTone).sort(), ['FAILED', 'PENDING', 'SUCCEEDED']);
 });
 
 test('normalizes the order reply-to email and stores blanks as null', () => {

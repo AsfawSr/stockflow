@@ -1,4 +1,4 @@
-import { ArrowLeft, Webhook as WebhookIcon } from 'lucide-react';
+import { ArrowLeft, History, Webhook as WebhookIcon } from 'lucide-react';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { AppShell } from '@/components/app-shell';
@@ -96,6 +96,13 @@ export default async function WebhooksPage({
                     <td>{formatTime(webhook.createdAt)}</td>
                     <td>
                       <div className="row-actions">
+                        <Link
+                          className="secondary-button row-button"
+                          href={`/workspace/${organization.id}/webhooks/${webhook.id}/deliveries`}
+                          aria-label={`Deliveries for ${webhook.url}`}
+                        >
+                          <History size={15} aria-hidden="true" />
+                        </Link>
                         <WebhookToggleButton organizationId={organization.id} webhook={webhook} />
                         <DeleteWebhookButton organizationId={organization.id} webhook={webhook} />
                       </div>
