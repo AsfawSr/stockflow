@@ -18,6 +18,7 @@ import { StockModule } from './stock/stock.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { MaintenanceModule } from './maintenance/maintenance.module';
 import { MonitoringModule } from './health/monitoring.module';
+import { ReportsModule } from './reports/reports.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { PostgresThrottlerStorage } from './maintenance/postgres-throttler.storage';
 
@@ -36,6 +37,7 @@ import { PostgresThrottlerStorage } from './maintenance/postgres-throttler.stora
     InvitationsModule,
     MaintenanceModule,
     MonitoringModule,
+    ReportsModule,
     WebhooksModule,
     ThrottlerModule.forRootAsync({
       imports: [PrismaModule],
