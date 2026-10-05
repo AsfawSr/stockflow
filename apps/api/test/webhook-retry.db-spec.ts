@@ -71,6 +71,7 @@ describe('Webhook retries against PostgreSQL', () => {
         invitation: transaction.invitation,
         product: transaction.product,
         supplier: transaction.supplier,
+        supplierCatalogPrice: transaction.supplierCatalogPrice,
         location: transaction.location,
         purchaseOrder: transaction.purchaseOrder,
         purchaseOrderLine: transaction.purchaseOrderLine,

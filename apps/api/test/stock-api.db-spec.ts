@@ -48,6 +48,7 @@ describe('Stock APIs against PostgreSQL', () => {
         webhookDelivery: transaction.webhookDelivery,
         product: transaction.product,
         supplier: transaction.supplier,
+        supplierCatalogPrice: transaction.supplierCatalogPrice,
         location: transaction.location,
         stockLevel: transaction.stockLevel,
         stockMovement: transaction.stockMovement,

@@ -54,6 +54,7 @@ describe('Purchase order workflow against PostgreSQL', () => {
       webhookDelivery: transaction.webhookDelivery,
       product: transaction.product,
       supplier: transaction.supplier,
+      supplierCatalogPrice: transaction.supplierCatalogPrice,
       location: transaction.location,
       purchaseOrder: transaction.purchaseOrder,
       purchaseOrderLine: transaction.purchaseOrderLine,
@@ -822,8 +823,25 @@ describe('Purchase order workflow against PostgreSQL', () => {
           supplier: null,
           unitPrice: null,
           reference: null,
+          source: null,
         },
       ]);
+
+      // Without order history, the cheapest active catalog quote fills the gap.
+      await request(app.getHttpServer())
+        .put(
+          `/api/organizations/${seed.organizationId}/suppliers/${seed.supplierId}/catalog/${seed.chargerId}`,
+        )
+        .set('Authorization', owner.auth)
+        .send({ unitPrice: '6.75' })
+        .expect(200);
+      const quoted = await getSuggestions().expect(200);
+      expect(quoted.body.items[0]).toMatchObject({
+        supplier: { id: seed.supplierId, name: 'Order Supplier' },
+        unitPrice: '6.75',
+        reference: null,
+        source: 'catalog',
+      });
 
       // A confirmed order attaches the supplier and price; its receipt raises on-hand.
       const created = await request(app.getHttpServer())
@@ -863,6 +881,7 @@ describe('Purchase order workflow against PostgreSQL', () => {
           supplier: { id: seed.supplierId, name: 'Order Supplier' },
           unitPrice: '7.50',
           reference: 'PO-0001',
+          source: 'confirmed',
         },
       ]);
 
@@ -876,6 +895,7 @@ describe('Purchase order workflow against PostgreSQL', () => {
         supplier: null,
         unitPrice: null,
         reference: null,
+        source: null,
         suggestedQuantity: 16,
       });
       await request(app.getHttpServer())

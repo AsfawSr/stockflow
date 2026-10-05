@@ -187,13 +187,26 @@ export class PurchaseOrdersService {
         WHERE o.organization_id = ${organizationId}::uuid
           AND o.status::text IN ('APPROVED', 'PARTIALLY_RECEIVED', 'RECEIVED')
         ORDER BY l.product_id, o.decided_at DESC, l.id DESC
+      ),
+      catalog_price AS (
+        SELECT DISTINCT ON (c.product_id)
+          c.product_id, c.unit_price,
+          s.id AS supplier_id, s.name AS supplier_name
+        FROM supplier_catalog_prices c
+        JOIN suppliers s ON s.id = c.supplier_id
+        WHERE c.organization_id = ${organizationId}::uuid AND s.archived_at IS NULL
+        ORDER BY c.product_id, c.unit_price ASC, c.updated_at DESC
       )
       SELECT p.id, p.sku, p.name, p.unit, p.reorder_point,
         COALESCE(h.total, 0) AS on_hand,
-        lp.unit_price, lp.number, lp.supplier_id, lp.supplier_name, lp.supplier_archived_at
+        lp.unit_price, lp.number, lp.supplier_id, lp.supplier_name, lp.supplier_archived_at,
+        cp.unit_price AS catalog_unit_price,
+        cp.supplier_id AS catalog_supplier_id,
+        cp.supplier_name AS catalog_supplier_name
       FROM products p
       LEFT JOIN on_hand h ON h.product_id = p.id
       LEFT JOIN latest_price lp ON lp.product_id = p.id
+      LEFT JOIN catalog_price cp ON cp.product_id = p.id
       WHERE p.organization_id = ${organizationId}::uuid
         AND p.archived_at IS NULL
         AND p.reorder_point IS NOT NULL
@@ -211,27 +224,40 @@ export class PurchaseOrdersService {
       supplier_id: string | null;
       supplier_name: string | null;
       supplier_archived_at: Date | null;
+      catalog_unit_price: string | null;
+      catalog_supplier_id: string | null;
+      catalog_supplier_name: string | null;
     }[];
     return {
       items: rows.map((row) => {
         const supplierUsable = row.supplier_id !== null && row.supplier_archived_at === null;
-        return {
+        const base = {
           product: { id: row.id, sku: row.sku, name: row.name, unit: row.unit },
           reorderPoint: row.reorder_point,
           onHand: row.on_hand,
           suggestedQuantity: Math.max(1, row.reorder_point * 2 - row.on_hand),
-          supplier: supplierUsable
-            ? { id: row.supplier_id as string, name: row.supplier_name as string }
-            : null,
-          unitPrice:
-            supplierUsable && row.unit_price !== null
-              ? new Prisma.Decimal(row.unit_price).toFixed(2)
-              : null,
-          reference:
-            supplierUsable && row.number !== null
-              ? `PO-${String(row.number).padStart(4, '0')}`
-              : null,
         };
+        if (supplierUsable) {
+          return {
+            ...base,
+            supplier: { id: row.supplier_id as string, name: row.supplier_name as string },
+            unitPrice:
+              row.unit_price !== null ? new Prisma.Decimal(row.unit_price).toFixed(2) : null,
+            reference: row.number !== null ? `PO-${String(row.number).padStart(4, '0')}` : null,
+            source: 'confirmed' as const,
+          };
+        }
+        // No usable order history: fall back to the cheapest active catalog quote.
+        if (row.catalog_supplier_id !== null) {
+          return {
+            ...base,
+            supplier: { id: row.catalog_supplier_id, name: row.catalog_supplier_name as string },
+            unitPrice: new Prisma.Decimal(row.catalog_unit_price as string).toFixed(2),
+            reference: null,
+            source: 'catalog' as const,
+          };
+        }
+        return { ...base, supplier: null, unitPrice: null, reference: null, source: null };
       }),
     };
   }
