@@ -9,13 +9,16 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { AuthenticatedRequest } from '../auth/auth.guard';
 import { VerifiedEmailGuard } from '../auth/auth.guard';
 import { ListQueryDto } from '../common/list-query.dto';
 import { OrganizationAccessGuard, Roles } from '../organizations/organization-access.guard';
-import { CreateSupplierDto, UpdateSupplierDto } from './suppliers.dto';
+import { CreateSupplierDto, SetCatalogPriceDto, UpdateSupplierDto } from './suppliers.dto';
 import { SuppliersService } from './suppliers.service';
 
 @Controller('organizations/:organizationId/suppliers')
@@ -54,6 +57,25 @@ export class SuppliersController {
     @Param('supplierId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) supplierId: string,
   ) {
     return this.suppliers.catalog(organizationId, supplierId);
+  }
+
+  @Put(':supplierId/catalog/:productId')
+  @Roles('ADMIN', 'PURCHASER')
+  @Header('Cache-Control', 'no-store')
+  setCatalogPrice(
+    @Req() request: AuthenticatedRequest,
+    @Param('organizationId') organizationId: string,
+    @Param('supplierId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) supplierId: string,
+    @Param('productId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) productId: string,
+    @Body() input: SetCatalogPriceDto,
+  ) {
+    return this.suppliers.setCatalogPrice(
+      request.principal.user.id,
+      organizationId,
+      supplierId,
+      productId,
+      input.unitPrice,
+    );
   }
 
   @Get(':supplierId/performance')

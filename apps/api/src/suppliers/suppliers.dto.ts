@@ -52,3 +52,10 @@ export class UpdateSupplierDto extends CreateSupplierDto {
   @MaxLength(160)
   declare name: string;
 }
+
+export class SetCatalogPriceDto {
+  @Transform(trimmed)
+  @IsString()
+  @Matches(/^\d{1,10}(\.\d{1,2})?$/, { message: 'Enter a price such as 25 or 25.50.' })
+  unitPrice!: string;
+}

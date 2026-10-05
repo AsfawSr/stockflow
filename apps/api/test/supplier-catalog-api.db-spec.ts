@@ -102,6 +102,29 @@ describe('Supplier catalog API against PostgreSQL', () => {
     return { auth: `Bearer ${response.body.accessToken as string}`, email };
   }
 
+  async function addMember(
+    app: INestApplication,
+    ownerAuth: string,
+    organizationId: string,
+    roles: string[],
+    displayName: string,
+  ) {
+    const member = await registerVerified(app, displayName);
+    await request(app.getHttpServer())
+      .post(`/api/organizations/${organizationId}/invitations`)
+      .set('Authorization', ownerAuth)
+      .send({ email: member.email, roles })
+      .expect(201);
+    const mail = outbox.findLast((message) => message.to === member.email)!;
+    const token = new URLSearchParams(new URL(mail.actionUrl!).hash.slice(1)).get('token')!;
+    await request(app.getHttpServer())
+      .post('/api/invitations/accept')
+      .set('Authorization', member.auth)
+      .send({ token })
+      .expect(200);
+    return member;
+  }
+
   it('lists quoted prices by product name for members only', async () => {
     await withApplication(async (app, database) => {
       const owner = await registerVerified(app, 'Catalog Owner');
@@ -179,6 +202,87 @@ describe('Supplier catalog API against PostgreSQL', () => {
         .set('Authorization', outsider.auth)
         .expect(404);
       await request(app.getHttpServer()).get(`${api}/suppliers/${supplierId}/catalog`).expect(401);
+    });
+  }, 60000);
+
+  it('quotes and requotes products with role and state guards', async () => {
+    await withApplication(async (app, database) => {
+      const owner = await registerVerified(app, 'Catalog Owner');
+      const organization = await request(app.getHttpServer())
+        .post('/api/organizations')
+        .set('Authorization', owner.auth)
+        .send({ name: `Catalog ${randomUUID().slice(0, 8)}`, currency: 'USD' })
+        .expect(201);
+      const organizationId = organization.body.id as string;
+      const api = `/api/organizations/${organizationId}`;
+      const authed = (method: 'get' | 'post' | 'put', path: string) =>
+        request(app.getHttpServer())[method](`${api}${path}`).set('Authorization', owner.auth);
+
+      const supplier = await authed('post', '/suppliers').send({ name: 'Quoting Supplier' });
+      const supplierId = supplier.body.id as string;
+      const product = await authed('post', '/products').send({
+        sku: 'QUOTE-1',
+        name: 'Quoted Widget',
+        unit: 'piece',
+      });
+      const productId = product.body.id as string;
+      const entryPath = `/suppliers/${supplierId}/catalog/${productId}`;
+
+      const created = await authed('put', entryPath).send({ unitPrice: '12.50' }).expect(200);
+      expect(created.body).toMatchObject({
+        product: { id: productId, sku: 'QUOTE-1' },
+        unitPrice: '12.50',
+      });
+
+      // Requoting updates the same entry instead of adding a second one.
+      const requoted = await authed('put', entryPath).send({ unitPrice: '11' }).expect(200);
+      expect(requoted.body.id).toBe(created.body.id);
+      expect(requoted.body.unitPrice).toBe('11.00');
+      const list = await authed('get', `/suppliers/${supplierId}/catalog`).expect(200);
+      expect(list.body.items).toHaveLength(1);
+      expect(list.body.items[0].unitPrice).toBe('11.00');
+
+      await authed('put', entryPath).send({ unitPrice: 'twelve' }).expect(400);
+      await authed('put', entryPath).send({ unitPrice: '-5' }).expect(400);
+      await authed('put', entryPath).send({ unitPrice: '0' }).expect(400);
+      await authed('put', entryPath).send({ unitPrice: '0.00' }).expect(400);
+      await authed('put', `/suppliers/${randomUUID()}/catalog/${productId}`)
+        .send({ unitPrice: '5.00' })
+        .expect(404);
+      await authed('put', `/suppliers/${supplierId}/catalog/${randomUUID()}`)
+        .send({ unitPrice: '5.00' })
+        .expect(404);
+
+      // Archived products cannot be quoted.
+      await authed('post', `/products/${productId}/archive`).expect(200);
+      await authed('put', entryPath).send({ unitPrice: '5.00' }).expect(409);
+      await authed('post', `/products/${productId}/restore`).expect(200);
+
+      // Warehouse members manage stock, not supplier terms.
+      const warehouse = await addMember(
+        app,
+        owner.auth,
+        organizationId,
+        ['WAREHOUSE'],
+        'Catalog Warehouse',
+      );
+      await request(app.getHttpServer())
+        .put(`${api}${entryPath}`)
+        .set('Authorization', warehouse.auth)
+        .send({ unitPrice: '5.00' })
+        .expect(403);
+
+      const audit = await database.auditEvent.findMany({
+        where: { organizationId, action: 'supplier.price_set' },
+        orderBy: { createdAt: 'asc' },
+      });
+      expect(audit).toHaveLength(2);
+      expect(audit[0].summary).toBe('Quoted Quoted Widget at 12.50 for Quoting Supplier');
+      expect(audit[0].entityId).toBe(supplierId);
+
+      // Archived organizations reject quoting like every other change.
+      await authed('post', '/archive').expect(200);
+      await authed('put', entryPath).send({ unitPrice: '6.00' }).expect(423);
     });
   }, 60000);
 });

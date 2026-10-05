@@ -1,4 +1,10 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { AuditService } from '../audit/audit.service';
 import { Prisma } from '../generated/prisma/client';
 import { ListQueryDto } from '../common/list-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,7 +24,10 @@ const supplierSelect = {
 
 @Injectable()
 export class SuppliersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   private duplicateName(error: unknown): void {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -85,6 +94,51 @@ export class SuppliersService {
         unitPrice: entry.unitPrice.toFixed(2),
         updatedAt: entry.updatedAt,
       })),
+    };
+  }
+
+  async setCatalogPrice(
+    actorId: string,
+    organizationId: string,
+    supplierId: string,
+    productId: string,
+    unitPrice: string,
+  ) {
+    const supplier = await this.get(organizationId, supplierId);
+    const product = await this.prisma.product.findUnique({
+      where: { organizationId_id: { organizationId, id: productId } },
+      select: { name: true, archivedAt: true },
+    });
+    if (!product) throw new NotFoundException('Product not found.');
+    if (product.archivedAt) {
+      throw new ConflictException('Archived products cannot be quoted.');
+    }
+    const price = new Prisma.Decimal(unitPrice);
+    if (price.lessThanOrEqualTo(0)) throw new BadRequestException('Enter a price above zero.');
+    const entry = await this.prisma.supplierCatalogPrice.upsert({
+      where: { supplierId_productId: { supplierId, productId } },
+      create: { organizationId, supplierId, productId, unitPrice: price },
+      update: { unitPrice: price },
+      select: {
+        id: true,
+        unitPrice: true,
+        updatedAt: true,
+        product: { select: { id: true, sku: true, name: true, unit: true } },
+      },
+    });
+    await this.audit.record({
+      organizationId,
+      actorId,
+      action: 'supplier.price_set',
+      entityType: 'supplier',
+      entityId: supplierId,
+      summary: `Quoted ${product.name} at ${price.toFixed(2)} for ${supplier.name}`,
+    });
+    return {
+      id: entry.id,
+      product: entry.product,
+      unitPrice: entry.unitPrice.toFixed(2),
+      updatedAt: entry.updatedAt,
     };
   }
 
