@@ -232,6 +232,23 @@ async function main() {
     reason: 'Opening balance',
   });
 
+  // A completed cycle count: one shelf short, one surprise find, one match.
+  const count = await call('POST', `${org}/cycle-counts`, {
+    locationId: locations['Main Warehouse'],
+    note: 'Friday sweep, aisles 1-3',
+  });
+  const recount = (sku, countedQuantity) =>
+    call('PUT', `${org}/cycle-counts/${count.id}/lines/${products[sku]}`, { countedQuantity });
+  await recount('USB-C-65W', 19);
+  await recount('KB-TKL', 1);
+  await recount('PSU-650', 2);
+  await call('POST', `${org}/cycle-counts/${count.id}/complete`);
+  // A second session left open for the demo walkthrough.
+  await call('POST', `${org}/cycle-counts`, {
+    locationId: locations['Retail Store'],
+    note: 'Evening spot check',
+  });
+
   const [levels, suggestions, valuation, audit] = await Promise.all([
     call('GET', `${stock}/levels?pageSize=1`),
     call('GET', `${base}/suggestions`),
