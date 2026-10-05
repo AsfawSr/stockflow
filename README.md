@@ -363,6 +363,37 @@ the stock page. Tests cover the averaging across multiple deliveries at
 different prices, write-offs, cost-less stock, zero balances, and tenant
 isolation.
 
+## Cycle Counts
+
+A cycle count reconciles shelf stock with the ledger one location at a time.
+`ADMIN` or `WAREHOUSE` roles open sessions and record counts; every member can
+read them. Opening, cancelling, and completing are all captured in the audit
+log (`count.opened`, `count.cancelled`, `count.completed`).
+
+| Method | Path                                         | Behavior                                                                                          |
+| ------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| POST   | `.../cycle-counts`                           | Open a session for an active location with an optional note; returns the full session.            |
+| GET    | `.../cycle-counts`                           | Page through sessions, newest first, with line counts.                                            |
+| GET    | `.../cycle-counts/:countId`                  | One session with its lines, ordered by product name.                                              |
+| PUT    | `.../cycle-counts/:countId/lines/:productId` | Record `{ countedQuantity }`; upserts the line and snapshots the live balance as the expectation. |
+| DELETE | `.../cycle-counts/:countId/lines/:productId` | Remove a recorded line; returns 204.                                                              |
+| POST   | `.../cycle-counts/:countId/cancel`           | Close the session without touching the ledger.                                                    |
+| POST   | `.../cycle-counts/:countId/complete`         | Post every difference as a stock adjustment; empty sessions answer 400.                           |
+
+Only `OPEN` sessions accept changes; completed and cancelled ones answer 409
+but stay readable. Completion claims the session first, then locks each
+counted product's balance row and posts the variance against the live balance
+at that moment — not the possibly stale snapshot — so a delivery received
+mid-count never produces a wrong correction. Each nonzero variance becomes a
+regular stock adjustment (reason “Cycle count at …”) with its ledger movement,
+the balance ends exactly at the counted quantity, and matching lines post
+nothing. Line expectations are refreshed to the balance the variance was
+posted against, so the completed report always explains its own adjustments.
+The web adds a counts list and a session screen under the stock area with a
+difference summary, and closed sessions state their outcome. Tests cover
+constraints, roles, state transitions, variance math in both directions,
+mid-count ledger movement, location and tenant scoping, and the browser flow.
+
 ## Invitation API
 
 Admins manage invitations under `/organizations/:organizationId/invitations`;
@@ -990,9 +1021,11 @@ reports can be frozen into immutable, audited snapshots with a browsable
 history. Milestone 27 adds supplier catalogs: hand-maintained quoted prices per
 supplier and product that sit beside confirmed order history with their
 difference, pre-fill draft order lines ahead of history, and source reorder
-suggestions for products that have never been ordered. Possible next steps:
-cycle-count sessions for the warehouse, organization data export, or
-multi-currency purchase orders.
+suggestions for products that have never been ordered. Milestone 28 closes the
+warehouse loop: cycle-count sessions record real shelf quantities per location
+and turn every difference into audited, locked stock adjustments posted
+against the live balance at completion time. Possible next steps: organization
+data export, multi-currency purchase orders, or count scheduling by location.
 
 ## Commit Workflow
 
