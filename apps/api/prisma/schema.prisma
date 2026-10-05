@@ -72,6 +72,7 @@ model Organization {
   auditEvents AuditEvent[]
   webhookEndpoints WebhookEndpoint[]
   webhookDeliveries WebhookDelivery[]
+  reportSnapshots ReportSnapshot[]
 
   @@map("organizations")
 }
@@ -311,6 +312,7 @@ model User {
   stockAdjustments StockAdjustment[] @relation("StockAdjustmentCreatedBy")
   sentInvitations Invitation[] @relation("InvitationInvitedBy")
   auditEvents AuditEvent[] @relation("AuditEventActor")
+  reportSnapshots ReportSnapshot[] @relation("ReportSnapshotCreatedBy")
 
   @@map("users")
 }
@@ -446,4 +448,18 @@ model WebhookDelivery {
   @@index([status, nextAttemptAt])
   @@index([webhookEndpointId, createdAt(sort: Desc), id])
   @@map("webhook_deliveries")
+}
+
+model ReportSnapshot {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  type           String       @db.VarChar(40)
+  payload        Json
+  createdById    String?      @map("created_by") @db.Uuid
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy      User?        @relation("ReportSnapshotCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt(sort: Desc), id])
+  @@map("report_snapshots")
 }
