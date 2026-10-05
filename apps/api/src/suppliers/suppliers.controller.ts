@@ -47,6 +47,15 @@ export class SuppliersController {
     return this.suppliers.prices(organizationId, supplierId);
   }
 
+  @Get(':supplierId/catalog')
+  @Header('Cache-Control', 'no-store')
+  catalog(
+    @Param('organizationId') organizationId: string,
+    @Param('supplierId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) supplierId: string,
+  ) {
+    return this.suppliers.catalog(organizationId, supplierId);
+  }
+
   @Get(':supplierId/performance')
   @Header('Cache-Control', 'no-store')
   performance(

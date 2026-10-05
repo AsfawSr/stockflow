@@ -65,6 +65,29 @@ export class SuppliersService {
     return supplier;
   }
 
+  // Quoted prices maintained by hand, independent of order history.
+  async catalog(organizationId: string, supplierId: string) {
+    await this.get(organizationId, supplierId);
+    const entries = await this.prisma.supplierCatalogPrice.findMany({
+      where: { organizationId, supplierId },
+      select: {
+        id: true,
+        unitPrice: true,
+        updatedAt: true,
+        product: { select: { id: true, sku: true, name: true, unit: true } },
+      },
+      orderBy: [{ product: { name: 'asc' } }, { id: 'asc' }],
+    });
+    return {
+      items: entries.map((entry) => ({
+        id: entry.id,
+        product: entry.product,
+        unitPrice: entry.unitPrice.toFixed(2),
+        updatedAt: entry.updatedAt,
+      })),
+    };
+  }
+
   // Latest confirmed unit price per product, derived from approved order history.
   async prices(organizationId: string, supplierId: string) {
     await this.get(organizationId, supplierId);
