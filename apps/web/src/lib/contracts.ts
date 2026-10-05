@@ -606,6 +606,61 @@ export const adjustmentInputSchema = z.object({
     .max(500, 'Use at most 500 characters.'),
 });
 
+export const cycleCountStatuses = ['OPEN', 'COMPLETED', 'CANCELLED'] as const;
+export type CycleCountStatus = (typeof cycleCountStatuses)[number];
+export const cycleCountStatusLabels: Record<CycleCountStatus, string> = {
+  OPEN: 'Open',
+  COMPLETED: 'Completed',
+  CANCELLED: 'Cancelled',
+};
+export const cycleCountTone: Record<CycleCountStatus, 'online' | 'offline' | 'pending'> = {
+  OPEN: 'pending',
+  COMPLETED: 'online',
+  CANCELLED: 'offline',
+};
+const countActorSchema = z.object({ id: z.uuid(), displayName: z.string().min(1) }).nullable();
+const cycleCountBaseSchema = z.object({
+  id: z.uuid(),
+  status: z.enum(cycleCountStatuses),
+  note: z.string().min(1).nullable(),
+  completedAt: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+  location: z.object({ id: z.uuid(), name: z.string().min(1) }),
+  createdBy: countActorSchema,
+  completedBy: countActorSchema,
+});
+export const cycleCountLineSchema = z.object({
+  id: z.uuid(),
+  expectedQuantity: z.number().int().nonnegative(),
+  countedQuantity: z.number().int().nonnegative(),
+  updatedAt: z.iso.datetime(),
+  product: orderProductSchema,
+});
+export const cycleCountSchema = cycleCountBaseSchema.extend({
+  lines: z.array(cycleCountLineSchema),
+});
+export const cycleCountListSchema = z.object({
+  items: z.array(cycleCountBaseSchema.extend({ lineCount: z.number().int().nonnegative() })),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+export type CycleCount = z.infer<typeof cycleCountSchema>;
+export const openCycleCountInputSchema = z.object({
+  locationId: z.uuid('Choose a location.'),
+  note: z
+    .string()
+    .trim()
+    .max(500, 'Use at most 500 characters.')
+    .transform((value) => (value === '' ? null : value)),
+});
+export const countedQuantityInputSchema = z.coerce
+  .number()
+  .int('Enter a whole number.')
+  .min(0, 'Counted stock cannot be negative.')
+  .max(1000000, 'Use at most 1,000,000.');
+
 export type PurchaseOrder = z.infer<typeof purchaseOrderSchema>;
 export type PurchaseOrderStatus = z.infer<typeof purchaseOrderStatusSchema>;
 

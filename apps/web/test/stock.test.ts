@@ -2,8 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   adjustmentInputSchema,
+  countedQuantityInputSchema,
+  cycleCountListSchema,
+  cycleCountSchema,
+  cycleCountStatusLabels,
+  cycleCountTone,
   movementTypeLabels,
   movementTypeTone,
+  openCycleCountInputSchema,
   stockLevelListSchema,
   stockMovementListSchema,
   stockMovementTypeSchema,
@@ -16,6 +22,64 @@ import {
 
 const uuid = '8ed13b94-fd8b-4079-848e-f22edaa8ce05';
 const otherUuid = '2b8fa8f2-15a5-4a37-a1a5-0e6ad1c2b6c1';
+
+test('validates cycle counts through their whole lifecycle', () => {
+  const line = {
+    id: uuid,
+    expectedQuantity: 5,
+    countedQuantity: 3,
+    updatedAt: new Date().toISOString(),
+    product: { id: uuid, sku: 'CHARGER-65', name: 'USB-C Charger', unit: 'piece' },
+  };
+  const count = {
+    id: uuid,
+    status: 'OPEN',
+    note: null,
+    completedAt: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    location: { id: otherUuid, name: 'Main Warehouse' },
+    createdBy: { id: uuid, displayName: 'Warehouse User' },
+    completedBy: null,
+    lines: [line],
+  };
+  assert.equal(cycleCountSchema.safeParse(count).success, true);
+  assert.equal(
+    cycleCountSchema.safeParse({
+      ...count,
+      status: 'COMPLETED',
+      completedAt: new Date().toISOString(),
+      completedBy: { id: uuid, displayName: 'Warehouse User' },
+    }).success,
+    true,
+  );
+  assert.equal(cycleCountSchema.safeParse({ ...count, status: 'TALLIED' }).success, false);
+  assert.equal(
+    cycleCountSchema.safeParse({ ...count, lines: [{ ...line, countedQuantity: -1 }] }).success,
+    false,
+  );
+  assert.equal(
+    cycleCountListSchema.safeParse({
+      items: [{ ...count, lines: undefined, lineCount: 1 }],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    }).success,
+    true,
+  );
+  assert.deepEqual(Object.keys(cycleCountStatusLabels).sort(), Object.keys(cycleCountTone).sort());
+
+  assert.deepEqual(openCycleCountInputSchema.parse({ locationId: uuid, note: '  ' }), {
+    locationId: uuid,
+    note: null,
+  });
+  assert.equal(openCycleCountInputSchema.safeParse({ locationId: 'nowhere' }).success, false);
+  assert.equal(countedQuantityInputSchema.parse('7'), 7);
+  assert.equal(countedQuantityInputSchema.parse('0'), 0);
+  for (const invalid of ['-1', '2.5', 'three', '1000001']) {
+    assert.equal(countedQuantityInputSchema.safeParse(invalid).success, false);
+  }
+});
 
 test('validates weekly trend reports', () => {
   const week = { weekStart: '2026-09-28', ordersCreated: 3, unitsReceived: 10, movements: 5 };
