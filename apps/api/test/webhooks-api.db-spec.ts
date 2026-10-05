@@ -144,11 +144,57 @@ describe('Webhook API against PostgreSQL', () => {
       const enabled = await authed('patch', `/${webhookId}`).send({ active: true }).expect(200);
       expect(enabled.body.active).toBe(true);
 
+      // The delivery log pages newest-first and never includes the secret.
+      expect((await authed('get', `/${webhookId}/deliveries`).expect(200)).body).toMatchObject({
+        url: 'https://example.test/hooks/orders',
+        items: [],
+        total: 0,
+      });
+      const organizationId = organization.body.id as string;
+      for (let index = 0; index < 3; index += 1) {
+        await database.webhookDelivery.create({
+          data: {
+            webhookEndpointId: webhookId,
+            organizationId,
+            event: `order.event-${index}`,
+            body: `{"sequence":${index}}`,
+            status: index === 0 ? 'PENDING' : 'SUCCEEDED',
+            attempts: 1,
+            responseStatus: index === 0 ? null : 200,
+            nextAttemptAt: index === 0 ? new Date() : null,
+            createdAt: new Date(Date.now() - (2 - index) * 1000),
+          },
+        });
+      }
+      const log = await authed('get', `/${webhookId}/deliveries?page=1&pageSize=2`).expect(200);
+      expect(log.body.total).toBe(3);
+      expect(log.body.items).toHaveLength(2);
+      expect(log.body.items[0]).toMatchObject({
+        event: 'order.event-2',
+        status: 'SUCCEEDED',
+        attempts: 1,
+        responseStatus: 200,
+        body: '{"sequence":2}',
+      });
+      expect(JSON.stringify(log.body)).not.toContain(created.body.secret);
+      const lastPage = await authed('get', `/${webhookId}/deliveries?page=2&pageSize=2`).expect(
+        200,
+      );
+      expect(lastPage.body.items.map((item: { event: string }) => item.event)).toEqual([
+        'order.event-0',
+      ]);
+      await authed('get', `/${randomUUID()}/deliveries`).expect(404);
+
       await authed('delete', `/${webhookId}`).expect(204);
       expect((await authed('get').expect(200)).body.items).toEqual([]);
       await authed('patch', `/${webhookId}`).send({ active: false }).expect(404);
       await authed('delete', `/${webhookId}`).expect(404);
       await authed('delete', '/not-a-uuid').expect(404);
+      // Deleting the endpoint removed its queued deliveries with it.
+      await authed('get', `/${webhookId}/deliveries`).expect(404);
+      expect(
+        await database.webhookDelivery.count({ where: { webhookEndpointId: webhookId } }),
+      ).toBe(0);
 
       const audit = await database.auditEvent.findMany({
         where: { organizationId: organization.body.id as string, entityType: 'webhook' },

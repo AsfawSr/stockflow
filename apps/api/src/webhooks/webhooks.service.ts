@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
+import { PageQueryDto } from '../common/list-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
 
 const endpointSelect = {
@@ -25,6 +26,39 @@ export class WebhooksService {
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
     return { items };
+  }
+
+  async deliveries(organizationId: string, webhookId: string, query: PageQueryDto) {
+    const endpoint = await this.prisma.webhookEndpoint.findFirst({
+      where: { id: webhookId, organizationId },
+      select: { id: true, url: true },
+    });
+    if (!endpoint) throw new NotFoundException('This webhook no longer exists.');
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 20;
+    const where = { webhookEndpointId: webhookId };
+    const [items, total] = await Promise.all([
+      this.prisma.webhookDelivery.findMany({
+        where,
+        select: {
+          id: true,
+          event: true,
+          body: true,
+          status: true,
+          attempts: true,
+          responseStatus: true,
+          lastError: true,
+          nextAttemptAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.webhookDelivery.count({ where }),
+    ]);
+    return { url: endpoint.url, items, total, page, pageSize };
   }
 
   // The signing secret is generated here and returned exactly once.
