@@ -19,6 +19,7 @@ import { InvitationsModule } from './invitations/invitations.module';
 import { MaintenanceModule } from './maintenance/maintenance.module';
 import { MonitoringModule } from './health/monitoring.module';
 import { CycleCountsModule } from './cycle-counts/cycle-counts.module';
+import { ExportsModule } from './exports/exports.module';
 import { ReportsModule } from './reports/reports.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { PostgresThrottlerStorage } from './maintenance/postgres-throttler.storage';
@@ -39,6 +40,7 @@ import { PostgresThrottlerStorage } from './maintenance/postgres-throttler.stora
     MaintenanceModule,
     MonitoringModule,
     CycleCountsModule,
+    ExportsModule,
     ReportsModule,
     WebhooksModule,
     ThrottlerModule.forRootAsync({
