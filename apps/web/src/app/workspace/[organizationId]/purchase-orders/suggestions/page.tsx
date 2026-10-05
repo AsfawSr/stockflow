@@ -62,7 +62,8 @@ export default async function ReorderSuggestionsPage({
         </div>
         <p className="muted">
           Suggested quantities order up to twice the reorder point. The supplier and price come from
-          the latest confirmed order for each product.
+          the latest confirmed order for each product, or from the cheapest catalog quote when no
+          order history exists.
         </p>
         {items.length === 0 ? (
           <div className="empty-organizations">
@@ -82,8 +83,8 @@ export default async function ReorderSuggestionsPage({
                   <th scope="col">ON HAND</th>
                   <th scope="col">REORDER AT</th>
                   <th scope="col">SUGGESTED QTY</th>
-                  <th scope="col">LAST SUPPLIER</th>
-                  <th scope="col">LAST PRICE</th>
+                  <th scope="col">SUPPLIER</th>
+                  <th scope="col">PRICE</th>
                   {canOrder && <th scope="col">ORDER</th>}
                 </tr>
               </thead>
@@ -104,7 +105,9 @@ export default async function ReorderSuggestionsPage({
                     <td>{item.supplier ? item.supplier.name : '\u2014'}</td>
                     <td>
                       {item.unitPrice
-                        ? `${item.unitPrice} ${organization.currency} (${item.reference})`
+                        ? `${item.unitPrice} ${organization.currency} (${
+                            item.source === 'catalog' ? 'catalog quote' : item.reference
+                          })`
                         : '\u2014'}
                     </td>
                     {canOrder && (
