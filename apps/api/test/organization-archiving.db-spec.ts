@@ -44,6 +44,7 @@ describe('Organization archiving against PostgreSQL', () => {
         accountToken: transaction.accountToken,
         auditEvent: transaction.auditEvent,
         webhookEndpoint: transaction.webhookEndpoint,
+        webhookDelivery: transaction.webhookDelivery,
         invitation: transaction.invitation,
         product: transaction.product,
         supplier: transaction.supplier,

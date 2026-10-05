@@ -56,6 +56,7 @@ describe('Webhook API against PostgreSQL', () => {
         stockTransfer: transaction.stockTransfer,
         stockAdjustment: transaction.stockAdjustment,
         webhookEndpoint: transaction.webhookEndpoint,
+        webhookDelivery: transaction.webhookDelivery,
         $transaction: (callback: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
           callback(transaction),
         $queryRaw: transaction.$queryRaw.bind(transaction),

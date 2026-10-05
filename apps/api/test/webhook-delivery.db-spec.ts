@@ -65,6 +65,7 @@ describe('Webhook delivery against PostgreSQL', () => {
         accountToken: transaction.accountToken,
         auditEvent: transaction.auditEvent,
         webhookEndpoint: transaction.webhookEndpoint,
+        webhookDelivery: transaction.webhookDelivery,
         invitation: transaction.invitation,
         product: transaction.product,
         supplier: transaction.supplier,
@@ -83,7 +84,9 @@ describe('Webhook delivery against PostgreSQL', () => {
       });
   }
 
-  async function withApplication(run: (app: INestApplication) => Promise<void>) {
+  async function withApplication(
+    run: (app: INestApplication, database: Prisma.TransactionClient) => Promise<void>,
+  ) {
     outbox.length = 0;
     deliveries.length = 0;
     const rollback = new Error('Rollback webhook delivery integration test');
@@ -96,7 +99,7 @@ describe('Webhook delivery against PostgreSQL', () => {
             app = module.createNestApplication();
             app.setGlobalPrefix('api');
             await app.init();
-            await run(app);
+            await run(app, database);
             throw rollback;
           },
           { timeout: 60000 },
@@ -121,7 +124,7 @@ describe('Webhook delivery against PostgreSQL', () => {
   }
 
   it('signs deliveries, skips disabled endpoints, and survives unreachable receivers', async () => {
-    await withApplication(async (app) => {
+    await withApplication(async (app, database) => {
       const owner = await registerVerified(app, 'Delivery Owner');
       const organization = await request(app.getHttpServer())
         .post('/api/organizations')
@@ -168,21 +171,50 @@ describe('Webhook delivery against PostgreSQL', () => {
       });
       expect(new Date(payload.occurredAt).getTime()).not.toBeNaN();
 
+      // The attempt is recorded as a succeeded delivery with the exact signed body.
+      const logged = await database.webhookDelivery.findMany({ where: { organizationId } });
+      expect(logged).toHaveLength(1);
+      expect(logged[0]).toMatchObject({
+        webhookEndpointId: webhook.body.id as string,
+        event: 'order.submitted',
+        status: 'SUCCEEDED',
+        attempts: 1,
+        responseStatus: 200,
+        lastError: null,
+        nextAttemptAt: null,
+      });
+      expect(logged[0].body).toBe(delivery.body);
+
       // A disabled endpoint receives nothing.
       await authed('patch', `/webhooks/${webhook.body.id as string}`)
         .send({ active: false })
         .expect(200);
       await authed('post', `/purchase-orders/${orderId}/approve`).send({}).expect(200);
       expect(deliveries).toHaveLength(1);
+      expect(await database.webhookDelivery.count({ where: { organizationId } })).toBe(1);
 
-      // An unreachable endpoint never blocks the transition.
-      await authed('post', '/webhooks').send({ url: 'http://127.0.0.1:9/unreachable' }).expect(201);
+      // An unreachable endpoint never blocks the transition; the failure is queued for retry.
+      const unreachable = await authed('post', '/webhooks')
+        .send({ url: 'http://127.0.0.1:9/unreachable' })
+        .expect(201);
       const detail = await authed('get', `/purchase-orders/${orderId}`).expect(200);
       const lineId = detail.body.lines[0].id as string;
       await authed('post', `/purchase-orders/${orderId}/receipts`)
         .send({ lines: [{ purchaseOrderLineId: lineId, quantity: 4 }] })
         .expect(201);
       expect(deliveries).toHaveLength(1);
+      const queued = await database.webhookDelivery.findMany({
+        where: { webhookEndpointId: unreachable.body.id as string },
+      });
+      expect(queued).toHaveLength(1);
+      expect(queued[0]).toMatchObject({
+        event: 'order.received',
+        status: 'PENDING',
+        attempts: 1,
+        responseStatus: null,
+      });
+      expect(queued[0].lastError).toBeTruthy();
+      expect(queued[0].nextAttemptAt!.getTime()).toBeGreaterThan(Date.now());
     });
   }, 60000);
 });

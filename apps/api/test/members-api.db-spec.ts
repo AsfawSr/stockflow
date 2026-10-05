@@ -45,6 +45,7 @@ describe('Member management APIs against PostgreSQL', () => {
         accountToken: transaction.accountToken,
         auditEvent: transaction.auditEvent,
         webhookEndpoint: transaction.webhookEndpoint,
+        webhookDelivery: transaction.webhookDelivery,
         invitation: transaction.invitation,
         $transaction: (callback: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
           callback(transaction),
