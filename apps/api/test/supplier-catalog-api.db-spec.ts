@@ -345,4 +345,93 @@ describe('Supplier catalog API against PostgreSQL', () => {
       expect(audit[0].summary).toBe('Removed the Removable Widget quote for Removal Supplier');
     });
   }, 60000);
+
+  it('feeds the restocking flow from quotes without crossing tenants', async () => {
+    await withApplication(async (app) => {
+      const owner = await registerVerified(app, 'Catalog Owner');
+      const organization = await request(app.getHttpServer())
+        .post('/api/organizations')
+        .set('Authorization', owner.auth)
+        .send({ name: `Catalog ${randomUUID().slice(0, 8)}`, currency: 'USD' })
+        .expect(201);
+      const organizationId = organization.body.id as string;
+      const api = `/api/organizations/${organizationId}`;
+      const authed = (method: 'get' | 'post' | 'put', path: string) =>
+        request(app.getHttpServer())[method](`${api}${path}`).set('Authorization', owner.auth);
+
+      const supplier = await authed('post', '/suppliers').send({ name: 'Restock Supplier' });
+      const supplierId = supplier.body.id as string;
+      const product = await authed('post', '/products').send({
+        sku: 'RESTOCK-1',
+        name: 'Restocked Widget',
+        unit: 'piece',
+        reorderPoint: 5,
+      });
+      const productId = product.body.id as string;
+      await authed('put', `/suppliers/${supplierId}/catalog/${productId}`)
+        .send({ unitPrice: '8.20' })
+        .expect(200);
+
+      // A second organization with its own quotes never leaks into the first.
+      const outsider = await registerVerified(app, 'Catalog Outsider');
+      const other = await request(app.getHttpServer())
+        .post('/api/organizations')
+        .set('Authorization', outsider.auth)
+        .send({ name: `Catalog Other ${randomUUID().slice(0, 8)}`, currency: 'USD' })
+        .expect(201);
+      const otherId = other.body.id as string;
+      const otherAuthed = (method: 'get' | 'post' | 'put', path: string) =>
+        request(app.getHttpServer())
+          [method](`/api/organizations/${otherId}${path}`)
+          .set('Authorization', outsider.auth);
+      const otherSupplier = await otherAuthed('post', '/suppliers').send({
+        name: 'Other Supplier',
+      });
+      const otherProduct = await otherAuthed('post', '/products').send({
+        sku: 'RESTOCK-1',
+        name: 'Restocked Widget',
+        unit: 'piece',
+        reorderPoint: 3,
+      });
+      await otherAuthed(
+        'put',
+        `/suppliers/${otherSupplier.body.id as string}/catalog/${otherProduct.body.id as string}`,
+      )
+        .send({ unitPrice: '1.10' })
+        .expect(200);
+
+      const suggestions = await authed('get', '/purchase-orders/suggestions').expect(200);
+      expect(suggestions.body.items).toHaveLength(1);
+      const suggestion = suggestions.body.items[0];
+      expect(suggestion).toMatchObject({
+        product: { id: productId },
+        suggestedQuantity: 10,
+        supplier: { id: supplierId, name: 'Restock Supplier' },
+        unitPrice: '8.20',
+        reference: null,
+        source: 'catalog',
+      });
+      const otherSuggestions = await otherAuthed('get', '/purchase-orders/suggestions').expect(200);
+      expect(otherSuggestions.body.items[0]).toMatchObject({
+        unitPrice: '1.10',
+        source: 'catalog',
+      });
+
+      // One-click restock: the draft order carries the quoted price.
+      const location = await authed('post', '/locations').send({ name: 'Restock Warehouse' });
+      const order = await authed('post', '/purchase-orders')
+        .send({ supplierId: suggestion.supplier.id, locationId: location.body.id })
+        .expect(201);
+      const draft = await authed('post', `/purchase-orders/${order.body.id as string}/lines`)
+        .send({
+          productId: suggestion.product.id,
+          quantity: suggestion.suggestedQuantity,
+          unitPrice: suggestion.unitPrice,
+        })
+        .expect(201);
+      expect(draft.body.status).toBe('DRAFT');
+      expect(draft.body.lines[0]).toMatchObject({ quantity: 10, unitPrice: '8.20' });
+      expect(draft.body.total).toBe('82.00');
+    });
+  }, 60000);
 });
