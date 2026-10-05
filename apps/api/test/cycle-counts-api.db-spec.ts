@@ -380,4 +380,114 @@ describe('Cycle count API against PostgreSQL', () => {
       await authed('post', `/cycle-counts/${second.body.id as string}/cancel`).expect(423);
     });
   }, 60000);
+
+  it('turns completion variances into adjustments against live balances', async () => {
+    await withApplication(async (app, database) => {
+      const owner = await registerVerified(app, 'Count Owner');
+      const organization = await request(app.getHttpServer())
+        .post('/api/organizations')
+        .set('Authorization', owner.auth)
+        .send({ name: `Counts ${randomUUID().slice(0, 8)}`, currency: 'USD' })
+        .expect(201);
+      const organizationId = organization.body.id as string;
+      const api = `/api/organizations/${organizationId}`;
+      const authed = (method: 'get' | 'post' | 'put', path: string) =>
+        request(app.getHttpServer())[method](`${api}${path}`).set('Authorization', owner.auth);
+
+      const location = await authed('post', '/locations').send({ name: 'Variance Warehouse' });
+      const locationId = location.body.id as string;
+      const skus = ['OVER-1', 'SHORT-1', 'EXACT-1', 'FRESH-1'];
+      const ids: Record<string, string> = {};
+      for (const sku of skus) {
+        const product = await authed('post', '/products').send({
+          sku,
+          name: `Counted ${sku}`,
+          unit: 'piece',
+        });
+        ids[sku] = product.body.id as string;
+      }
+      for (const [sku, quantity] of [
+        ['OVER-1', 5],
+        ['SHORT-1', 5],
+        ['EXACT-1', 5],
+      ] as const) {
+        await authed('post', '/stock/adjustments')
+          .send({ productId: ids[sku], locationId, quantity, reason: 'Opening balance' })
+          .expect(201);
+      }
+
+      const count = await authed('post', '/cycle-counts')
+        .send({ locationId, note: 'Friday sweep' })
+        .expect(201);
+      const countId = count.body.id as string;
+      const record = (sku: string, countedQuantity: number) =>
+        authed('put', `/cycle-counts/${countId}/lines/${ids[sku]}`).send({ countedQuantity });
+
+      // An empty session has nothing to post.
+      await authed('post', `/cycle-counts/${countId}/complete`).expect(400);
+
+      await record('OVER-1', 8).expect(200);
+      await record('SHORT-1', 2).expect(200);
+      await record('EXACT-1', 5).expect(200);
+      await record('FRESH-1', 3).expect(200);
+      // The ledger moves after the count was recorded; completion trusts the live balance.
+      await authed('post', '/stock/adjustments')
+        .send({ productId: ids['EXACT-1'], locationId, quantity: 1, reason: 'Late receipt' })
+        .expect(201);
+
+      const completed = await authed('post', `/cycle-counts/${countId}/complete`).expect(200);
+      expect(completed.body.status).toBe('COMPLETED');
+      expect(completed.body.completedAt).toBeTruthy();
+      expect(completed.body.completedBy.displayName).toBe('Count Owner');
+      const bySku = Object.fromEntries(
+        completed.body.lines.map((line: { product: { sku: string } }) => [line.product.sku, line]),
+      );
+      // Expectations are refreshed to the balance the variance was posted against.
+      expect(bySku['OVER-1']).toMatchObject({ expectedQuantity: 5, countedQuantity: 8 });
+      expect(bySku['SHORT-1']).toMatchObject({ expectedQuantity: 5, countedQuantity: 2 });
+      expect(bySku['EXACT-1']).toMatchObject({ expectedQuantity: 6, countedQuantity: 5 });
+      expect(bySku['FRESH-1']).toMatchObject({ expectedQuantity: 0, countedQuantity: 3 });
+
+      const levels = await authed('get', '/stock/levels?pageSize=100').expect(200);
+      const levelBySku = Object.fromEntries(
+        levels.body.items.map((item: { product: { sku: string }; quantity: number }) => [
+          item.product.sku,
+          item.quantity,
+        ]),
+      );
+      expect(levelBySku['OVER-1']).toBe(8);
+      expect(levelBySku['SHORT-1']).toBe(2);
+      expect(levelBySku['EXACT-1']).toBe(5);
+      expect(levelBySku['FRESH-1']).toBe(3);
+
+      // Four variances, one match: adjustments and movements line up.
+      const adjustments = await database.stockAdjustment.findMany({
+        where: { organizationId, reason: 'Cycle count at Variance Warehouse' },
+      });
+      expect(adjustments).toHaveLength(4);
+      const adjustmentBy = new Map(adjustments.map((row) => [row.productId, row.quantity]));
+      expect(adjustmentBy.get(ids['OVER-1'])).toBe(3);
+      expect(adjustmentBy.get(ids['SHORT-1'])).toBe(-3);
+      expect(adjustmentBy.get(ids['EXACT-1'])).toBe(-1);
+      expect(adjustmentBy.get(ids['FRESH-1'])).toBe(3);
+      expect(
+        await database.stockMovement.count({
+          where: { organizationId, type: 'ADJUSTMENT', stockAdjustmentId: { not: null } },
+        }),
+      ).toBe(8);
+
+      // Completed counts freeze like cancelled ones.
+      await authed('post', `/cycle-counts/${countId}/complete`).expect(409);
+      await record('OVER-1', 9).expect(409);
+
+      const audit = await database.auditEvent.findMany({
+        where: { organizationId, action: 'count.completed' },
+      });
+      expect(audit).toHaveLength(1);
+      expect(audit[0].summary).toBe(
+        'Completed a cycle count at Variance Warehouse with 4 adjustments',
+      );
+      expect(audit[0].entityId).toBe(countId);
+    });
+  }, 60000);
 });

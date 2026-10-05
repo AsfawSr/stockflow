@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { PageQueryDto } from '../common/list-query.dto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -168,6 +173,100 @@ export class CycleCountsService {
       entityType: 'cycle_count',
       entityId: countId,
       summary: `Cancelled a cycle count at ${count.location.name}`,
+    });
+    return this.get(organizationId, countId);
+  }
+
+  // Variances are posted against the balance at completion time, not the stale snapshot.
+  async complete(actorId: string, organizationId: string, countId: string) {
+    const count = await this.requireOpen(organizationId, countId);
+    const lines = await this.prisma.cycleCountLine.findMany({
+      where: { cycleCountId: countId },
+      select: { productId: true, countedQuantity: true },
+      orderBy: { productId: 'asc' },
+    });
+    if (lines.length === 0) {
+      throw new BadRequestException('Record at least one count before completing.');
+    }
+    const adjustments = await this.prisma.$transaction(async (tx) => {
+      // Claim the session first so competing completions cannot double-post.
+      const claimed = await tx.cycleCount.updateMany({
+        where: { id: countId, status: 'OPEN' },
+        data: { status: 'COMPLETED', completedById: actorId, completedAt: new Date() },
+      });
+      if (claimed.count !== 1) throw new ConflictException('Only open counts can be changed.');
+      let changed = 0;
+      for (const line of lines) {
+        const locked = (await tx.$queryRaw`
+          SELECT quantity FROM stock_levels
+          WHERE organization_id = ${organizationId}::uuid
+            AND product_id = ${line.productId}::uuid
+            AND location_id = ${count.locationId}::uuid
+          FOR UPDATE
+        `) as { quantity: number }[];
+        const live = locked[0]?.quantity ?? 0;
+        const variance = line.countedQuantity - live;
+        await tx.cycleCountLine.update({
+          where: { cycleCountId_productId: { cycleCountId: countId, productId: line.productId } },
+          data: { expectedQuantity: live },
+        });
+        if (variance === 0) continue;
+        const adjustment = await tx.stockAdjustment.create({
+          data: {
+            organizationId,
+            productId: line.productId,
+            locationId: count.locationId,
+            quantity: variance,
+            reason: `Cycle count at ${count.location.name}`,
+            createdById: actorId,
+          },
+          select: { id: true },
+        });
+        await tx.stockMovement.create({
+          data: {
+            organizationId,
+            productId: line.productId,
+            locationId: count.locationId,
+            type: 'ADJUSTMENT',
+            quantity: variance,
+            stockAdjustmentId: adjustment.id,
+            createdById: actorId,
+          },
+        });
+        if (locked.length === 1) {
+          await tx.stockLevel.update({
+            where: {
+              organizationId_productId_locationId: {
+                organizationId,
+                productId: line.productId,
+                locationId: count.locationId,
+              },
+            },
+            data: { quantity: line.countedQuantity },
+          });
+        } else {
+          await tx.stockLevel.create({
+            data: {
+              organizationId,
+              productId: line.productId,
+              locationId: count.locationId,
+              quantity: line.countedQuantity,
+            },
+          });
+        }
+        changed += 1;
+      }
+      return changed;
+    });
+    await this.audit.record({
+      organizationId,
+      actorId,
+      action: 'count.completed',
+      entityType: 'cycle_count',
+      entityId: countId,
+      summary: `Completed a cycle count at ${count.location.name} with ${adjustments} ${
+        adjustments === 1 ? 'adjustment' : 'adjustments'
+      }`,
     });
     return this.get(organizationId, countId);
   }
