@@ -490,4 +490,86 @@ describe('Cycle count API against PostgreSQL', () => {
       expect(audit[0].entityId).toBe(countId);
     });
   }, 60000);
+
+  it('scopes counts to their location and tenant', async () => {
+    await withApplication(async (app) => {
+      const owner = await registerVerified(app, 'Count Owner');
+      const organization = await request(app.getHttpServer())
+        .post('/api/organizations')
+        .set('Authorization', owner.auth)
+        .send({ name: `Counts ${randomUUID().slice(0, 8)}`, currency: 'USD' })
+        .expect(201);
+      const organizationId = organization.body.id as string;
+      const api = `/api/organizations/${organizationId}`;
+      const authed = (method: 'get' | 'post' | 'put', path: string) =>
+        request(app.getHttpServer())[method](`${api}${path}`).set('Authorization', owner.auth);
+
+      // The same product sits at two locations; only the counted one moves.
+      const main = await authed('post', '/locations').send({ name: 'Scope Main' });
+      const shelf = await authed('post', '/locations').send({ name: 'Scope Shelf' });
+      const product = await authed('post', '/products').send({
+        sku: 'SCOPE-1',
+        name: 'Scoped Widget',
+        unit: 'piece',
+      });
+      const productId = product.body.id as string;
+      for (const locationId of [main.body.id as string, shelf.body.id as string]) {
+        await authed('post', '/stock/adjustments')
+          .send({ productId, locationId, quantity: 4, reason: 'Opening balance' })
+          .expect(201);
+      }
+      const count = await authed('post', '/cycle-counts')
+        .send({ locationId: main.body.id })
+        .expect(201);
+      const countId = count.body.id as string;
+      await authed('put', `/cycle-counts/${countId}/lines/${productId}`)
+        .send({ countedQuantity: 1 })
+        .expect(200);
+      await authed('post', `/cycle-counts/${countId}/complete`).expect(200);
+      const levels = await authed('get', '/stock/levels?pageSize=100').expect(200);
+      const byLocation = Object.fromEntries(
+        levels.body.items.map((item: { location: { name: string }; quantity: number }) => [
+          item.location.name,
+          item.quantity,
+        ]),
+      );
+      expect(byLocation['Scope Main']).toBe(1);
+      expect(byLocation['Scope Shelf']).toBe(4);
+
+      // The posted variance reads like any other movement in the history.
+      const movements = await authed('get', '/stock/movements?pageSize=100').expect(200);
+      const variance = movements.body.items.find(
+        (item: { type: string; quantity: number }) =>
+          item.type === 'ADJUSTMENT' && item.quantity === -3,
+      );
+      expect(variance).toBeTruthy();
+      expect(variance.location.name).toBe('Scope Main');
+
+      // Another tenant can neither see nor touch the count.
+      const outsider = await registerVerified(app, 'Count Outsider');
+      const other = await request(app.getHttpServer())
+        .post('/api/organizations')
+        .set('Authorization', outsider.auth)
+        .send({ name: `Counts Other ${randomUUID().slice(0, 8)}`, currency: 'USD' })
+        .expect(201);
+      const otherId = other.body.id as string;
+      await request(app.getHttpServer())
+        .get(`${api}/cycle-counts/${countId}`)
+        .set('Authorization', outsider.auth)
+        .expect(404);
+      await request(app.getHttpServer())
+        .get(`/api/organizations/${otherId}/cycle-counts/${countId}`)
+        .set('Authorization', outsider.auth)
+        .expect(404);
+      await request(app.getHttpServer())
+        .post(`/api/organizations/${otherId}/cycle-counts/${countId}/complete`)
+        .set('Authorization', outsider.auth)
+        .expect(404);
+      const otherList = await request(app.getHttpServer())
+        .get(`/api/organizations/${otherId}/cycle-counts`)
+        .set('Authorization', outsider.auth)
+        .expect(200);
+      expect(otherList.body.items).toEqual([]);
+    });
+  }, 60000);
 });
