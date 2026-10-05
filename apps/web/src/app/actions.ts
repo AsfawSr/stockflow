@@ -38,6 +38,10 @@ import {
   supplierSchema,
   catalogPriceInputSchema,
   supplierCatalogEntrySchema,
+  countedQuantityInputSchema,
+  cycleCountLineSchema,
+  cycleCountSchema,
+  openCycleCountInputSchema,
   createdWebhookSchema,
   valuationSnapshotSchema,
   webhookSchema,
@@ -1005,4 +1009,123 @@ export async function removeCatalogPriceAction(
   if (!result.ok && result.status !== 404) return { error: result.error };
   revalidatePath(`/workspace/${organizationId.data}/suppliers/${supplierId.data}/prices`);
   return { success: 'Quote removed.' };
+}
+
+export async function openCycleCountAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  if (!organizationId.success) return { error: 'Choose a valid organization.' };
+  const values = {
+    locationId: String(form.get('locationId') ?? ''),
+    note: String(form.get('note') ?? ''),
+  };
+  const parsed = openCycleCountInputSchema.safeParse(values);
+  if (!parsed.success) return { fieldErrors: parsed.error.flatten().fieldErrors, values };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/cycle-counts`,
+    cycleCountSchema,
+    { method: 'POST', body: parsed.data },
+  );
+  if (!result.ok)
+    return {
+      error: result.status === 409 ? 'Archived locations cannot be counted.' : result.error,
+      values,
+    };
+  revalidatePath(`/workspace/${organizationId.data}/stock/counts`);
+  redirect(`/workspace/${organizationId.data}/stock/counts/${result.data.id}`);
+}
+
+const closedCountMessage = 'Only open counts can be changed.';
+
+export async function recordCountLineAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const countId = organizationIdSchema.safeParse(form.get('countId'));
+  const productId = organizationIdSchema.safeParse(form.get('productId'));
+  if (!organizationId.success || !countId.success || !productId.success)
+    return { error: 'This count is no longer available.' };
+  const values = { countedQuantity: String(form.get('countedQuantity') ?? '') };
+  const parsed = countedQuantityInputSchema.safeParse(values.countedQuantity);
+  if (!parsed.success)
+    return { fieldErrors: { countedQuantity: [parsed.error.issues[0].message] }, values };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/cycle-counts/${countId.data}/lines/${productId.data}`,
+    cycleCountLineSchema,
+    { method: 'PUT', body: { countedQuantity: parsed.data } },
+  );
+  if (!result.ok)
+    return { error: result.status === 409 ? closedCountMessage : result.error, values };
+  revalidatePath(`/workspace/${organizationId.data}/stock/counts/${countId.data}`);
+  return { success: `Counted ${result.data.product.sku}.` };
+}
+
+export async function removeCountLineAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const countId = organizationIdSchema.safeParse(form.get('countId'));
+  const productId = organizationIdSchema.safeParse(form.get('productId'));
+  if (!organizationId.success || !countId.success || !productId.success)
+    return { error: 'This count is no longer available.' };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/cycle-counts/${countId.data}/lines/${productId.data}`,
+    emptySchema,
+    { method: 'DELETE' },
+  );
+  if (!result.ok && result.status !== 404)
+    return { error: result.status === 409 ? closedCountMessage : result.error };
+  revalidatePath(`/workspace/${organizationId.data}/stock/counts/${countId.data}`);
+  return { success: 'Line removed.' };
+}
+
+export async function completeCycleCountAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const countId = organizationIdSchema.safeParse(form.get('countId'));
+  if (!organizationId.success || !countId.success)
+    return { error: 'This count is no longer available.' };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/cycle-counts/${countId.data}/complete`,
+    cycleCountSchema,
+    { method: 'POST' },
+  );
+  if (!result.ok)
+    return {
+      error:
+        result.status === 400
+          ? 'Record at least one count before completing.'
+          : result.status === 409
+            ? closedCountMessage
+            : result.error,
+    };
+  revalidatePath(`/workspace/${organizationId.data}/stock/counts/${countId.data}`);
+  revalidatePath(`/workspace/${organizationId.data}/stock/counts`);
+  revalidatePath(`/workspace/${organizationId.data}/stock`);
+  return { success: 'Count completed. Variances were posted as adjustments.' };
+}
+
+export async function cancelCycleCountAction(
+  _previous: FormState,
+  form: FormData,
+): Promise<FormState> {
+  const organizationId = organizationIdSchema.safeParse(form.get('organizationId'));
+  const countId = organizationIdSchema.safeParse(form.get('countId'));
+  if (!organizationId.success || !countId.success)
+    return { error: 'This count is no longer available.' };
+  const result = await actionRequest(
+    `/organizations/${organizationId.data}/cycle-counts/${countId.data}/cancel`,
+    cycleCountSchema,
+    { method: 'POST' },
+  );
+  if (!result.ok) return { error: result.status === 409 ? closedCountMessage : result.error };
+  revalidatePath(`/workspace/${organizationId.data}/stock/counts/${countId.data}`);
+  revalidatePath(`/workspace/${organizationId.data}/stock/counts`);
+  return { success: 'Count cancelled.' };
 }
