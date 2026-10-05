@@ -92,4 +92,65 @@ export class CycleCountsService {
     if (!count) throw new NotFoundException('Cycle count not found.');
     return count;
   }
+
+  private async requireOpen(organizationId: string, countId: string) {
+    const count = await this.prisma.cycleCount.findFirst({
+      where: { id: countId, organizationId },
+      select: { id: true, status: true, locationId: true, location: { select: { name: true } } },
+    });
+    if (!count) throw new NotFoundException('Cycle count not found.');
+    if (count.status !== 'OPEN') {
+      throw new ConflictException('Only open counts can be changed.');
+    }
+    return count;
+  }
+
+  // The expected quantity snapshots the live balance every time the line is saved.
+  async recordLine(
+    organizationId: string,
+    countId: string,
+    productId: string,
+    countedQuantity: number,
+  ) {
+    const count = await this.requireOpen(organizationId, countId);
+    const product = await this.prisma.product.findUnique({
+      where: { organizationId_id: { organizationId, id: productId } },
+      select: { archivedAt: true },
+    });
+    if (!product) throw new NotFoundException('Product not found.');
+    if (product.archivedAt) {
+      throw new ConflictException('Archived products cannot be counted.');
+    }
+    const level = await this.prisma.stockLevel.findUnique({
+      where: {
+        organizationId_productId_locationId: {
+          organizationId,
+          productId,
+          locationId: count.locationId,
+        },
+      },
+      select: { quantity: true },
+    });
+    const expectedQuantity = level?.quantity ?? 0;
+    return this.prisma.cycleCountLine.upsert({
+      where: { cycleCountId_productId: { cycleCountId: countId, productId } },
+      create: {
+        cycleCountId: countId,
+        organizationId,
+        productId,
+        expectedQuantity,
+        countedQuantity,
+      },
+      update: { expectedQuantity, countedQuantity },
+      select: lineSelect,
+    });
+  }
+
+  async removeLine(organizationId: string, countId: string, productId: string) {
+    await this.requireOpen(organizationId, countId);
+    const removed = await this.prisma.cycleCountLine.deleteMany({
+      where: { cycleCountId: countId, organizationId, productId },
+    });
+    if (removed.count !== 1) throw new NotFoundException('This product is not in the count.');
+  }
 }

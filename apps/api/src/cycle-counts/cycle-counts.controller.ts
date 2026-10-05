@@ -1,11 +1,14 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Header,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Query,
   Req,
   UseGuards,
@@ -14,7 +17,7 @@ import type { AuthenticatedRequest } from '../auth/auth.guard';
 import { VerifiedEmailGuard } from '../auth/auth.guard';
 import { PageQueryDto } from '../common/list-query.dto';
 import { OrganizationAccessGuard, Roles } from '../organizations/organization-access.guard';
-import { OpenCycleCountDto } from './cycle-counts.dto';
+import { OpenCycleCountDto, RecordCountDto } from './cycle-counts.dto';
 import { CycleCountsService } from './cycle-counts.service';
 
 @Controller('organizations/:organizationId/cycle-counts')
@@ -46,5 +49,28 @@ export class CycleCountsController {
     @Body() input: OpenCycleCountDto,
   ) {
     return this.counts.open(request.principal.user.id, organizationId, input);
+  }
+
+  @Put(':countId/lines/:productId')
+  @Roles('ADMIN', 'WAREHOUSE')
+  @Header('Cache-Control', 'no-store')
+  recordLine(
+    @Param('organizationId') organizationId: string,
+    @Param('countId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) countId: string,
+    @Param('productId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) productId: string,
+    @Body() input: RecordCountDto,
+  ) {
+    return this.counts.recordLine(organizationId, countId, productId, input.countedQuantity);
+  }
+
+  @Delete(':countId/lines/:productId')
+  @Roles('ADMIN', 'WAREHOUSE')
+  @HttpCode(204)
+  removeLine(
+    @Param('organizationId') organizationId: string,
+    @Param('countId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) countId: string,
+    @Param('productId', new ParseUUIDPipe({ errorHttpStatusCode: 404 })) productId: string,
+  ) {
+    return this.counts.removeLine(organizationId, countId, productId);
   }
 }

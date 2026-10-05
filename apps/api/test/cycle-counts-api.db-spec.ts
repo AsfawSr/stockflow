@@ -226,4 +226,103 @@ describe('Cycle count API against PostgreSQL', () => {
       expect(audit[0].entityType).toBe('cycle_count');
     });
   }, 60000);
+
+  it('records and corrects counted lines while the session is open', async () => {
+    await withApplication(async (app) => {
+      const owner = await registerVerified(app, 'Count Owner');
+      const organization = await request(app.getHttpServer())
+        .post('/api/organizations')
+        .set('Authorization', owner.auth)
+        .send({ name: `Counts ${randomUUID().slice(0, 8)}`, currency: 'USD' })
+        .expect(201);
+      const organizationId = organization.body.id as string;
+      const api = `/api/organizations/${organizationId}`;
+      const authed = (method: 'get' | 'post' | 'put' | 'delete', path: string) =>
+        request(app.getHttpServer())[method](`${api}${path}`).set('Authorization', owner.auth);
+
+      const location = await authed('post', '/locations').send({ name: 'Line Warehouse' });
+      const locationId = location.body.id as string;
+      const charger = await authed('post', '/products').send({
+        sku: 'LINE-1',
+        name: 'Lined Charger',
+        unit: 'piece',
+      });
+      const chargerId = charger.body.id as string;
+      const cable = await authed('post', '/products').send({
+        sku: 'LINE-2',
+        name: 'Lined Cable',
+        unit: 'piece',
+      });
+      await authed('post', '/stock/adjustments')
+        .send({ productId: chargerId, locationId, quantity: 5, reason: 'Opening balance' })
+        .expect(201);
+
+      const count = await authed('post', '/cycle-counts').send({ locationId }).expect(201);
+      const countId = count.body.id as string;
+      const linePath = (productId: string) => `/cycle-counts/${countId}/lines/${productId}`;
+
+      // The expected quantity snapshots the live balance at save time.
+      const recorded = await authed('put', linePath(chargerId))
+        .send({ countedQuantity: 3 })
+        .expect(200);
+      expect(recorded.body).toMatchObject({
+        expectedQuantity: 5,
+        countedQuantity: 3,
+        product: { id: chargerId, sku: 'LINE-1' },
+      });
+      const corrected = await authed('put', linePath(chargerId))
+        .send({ countedQuantity: 4 })
+        .expect(200);
+      expect(corrected.body.id).toBe(recorded.body.id);
+      expect(corrected.body.countedQuantity).toBe(4);
+      await authed('post', '/stock/adjustments')
+        .send({ productId: chargerId, locationId, quantity: 2, reason: 'Late receipt' })
+        .expect(201);
+      const refreshed = await authed('put', linePath(chargerId))
+        .send({ countedQuantity: 4 })
+        .expect(200);
+      expect(refreshed.body.expectedQuantity).toBe(7);
+
+      // Products with no balance at the location expect zero.
+      const empty = await authed('put', linePath(cable.body.id as string))
+        .send({ countedQuantity: 1 })
+        .expect(200);
+      expect(empty.body.expectedQuantity).toBe(0);
+
+      await authed('put', linePath(chargerId)).send({ countedQuantity: -1 }).expect(400);
+      await authed('put', linePath(chargerId)).send({ countedQuantity: 'three' }).expect(400);
+      await authed('put', linePath(chargerId)).send({}).expect(400);
+      await authed('put', linePath(randomUUID())).send({ countedQuantity: 1 }).expect(404);
+      await authed('put', `/cycle-counts/${randomUUID()}/lines/${chargerId}`)
+        .send({ countedQuantity: 1 })
+        .expect(404);
+      const retired = await authed('post', '/products').send({
+        sku: 'LINE-3',
+        name: 'Retired Widget',
+        unit: 'piece',
+      });
+      await authed('post', `/products/${retired.body.id as string}/archive`).expect(200);
+      await authed('put', linePath(retired.body.id as string))
+        .send({ countedQuantity: 1 })
+        .expect(409);
+
+      const detail = await authed('get', `/cycle-counts/${countId}`).expect(200);
+      expect(
+        detail.body.lines.map((line: { product: { sku: string } }) => line.product.sku),
+      ).toEqual(['LINE-2', 'LINE-1']);
+
+      await authed('delete', linePath(cable.body.id as string)).expect(204);
+      await authed('delete', linePath(cable.body.id as string)).expect(404);
+      expect((await authed('get', `/cycle-counts/${countId}`).expect(200)).body.lines).toHaveLength(
+        1,
+      );
+
+      const manager = await addMember(app, owner.auth, organizationId, ['MANAGER'], 'Line Manager');
+      await request(app.getHttpServer())
+        .put(`${api}${linePath(chargerId)}`)
+        .set('Authorization', manager.auth)
+        .send({ countedQuantity: 2 })
+        .expect(403);
+    });
+  }, 60000);
 });
